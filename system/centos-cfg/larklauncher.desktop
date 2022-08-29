@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Lark Launcher
+Comment=Start the Lark launcher
+Exec=zsh -c 'source ~/.zshrc; /opt/lark/pylark/bin/larklauncher'
+Icon=lark-launcher
+Terminal=true
+Type=Application

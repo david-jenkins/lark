@@ -1,0 +1,11 @@
+numpy
+matplotlib
+rpyc
+PyQt5
+pyqtgraph
+pyyaml
+toml
+inotify
+pyinotify
+watchdog
+numa

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Lark GUI
+Comment=Start the Lark main GUI
+Exec=zsh -c 'source ~/.zshrc; /opt/lark/pylark/bin/larkgui'
+Icon=lark-gui
+Terminal=true
+Type=Application

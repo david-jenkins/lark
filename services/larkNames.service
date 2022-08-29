@@ -1,0 +1,13 @@
+[Unit]
+Description=LarkNames RPyC NameServer
+
+[Service]
+ExecStart=/opt/lark/pylark/bin/larkNames -o
+Restart=always
+RestartSec=1
+Type=notify
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

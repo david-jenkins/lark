@@ -1,0 +1,15 @@
+[Unit]
+Description=An RPyC and TCP/IP server to control Lark
+
+[Service]
+Environment=PATH=$PATH:/opt/darc/bin:/bin
+Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/darc/lib:/usr/local/lib:/usr/local/lib64
+ExecStart=/opt/lark/pylark/bin/larkDaemon -o
+Restart=always
+RestartSec=1
+Type=notify
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
