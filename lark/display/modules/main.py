@@ -22,7 +22,7 @@ pg.setConfigOption('exitCleanup', False)
 
 from lark.display.main import MainWindow, MainWidget as _MainWidget, DisplayWidget as _DisplayWidget
 from .wfs import CamControl
-from .srtc import SrtcMain
+from ..srtc import SrtcMain
 
 from lark.display.modes import ObservingBlockOpener
 

@@ -12,6 +12,7 @@ from lark.interface import startServiceClient, connectDaemon, connectClient
 from .widgets.srtc_base import SrtcFunctionList_base, SrtcControl_base
 
 import lark
+
 class SrtcFunctionList(SrtcFunctionList_base):
     def __init__(self,parent=None):
         super().__init__(parent=parent)

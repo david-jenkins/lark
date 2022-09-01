@@ -12,7 +12,7 @@ pg.setConfigOption('exitCleanup', False)
 
 from lark.display.main import MainWindow, MainWidget as _MainWidget, DisplayWidget as _DisplayWidget
 from lark.display.modules.wfs import CamControl, PyCircles
-from lark.display.modules.srtc import SrtcMain
+from lark.display.srtc import SrtcMain
 from lark.display.modules.custom import CustomMain
 
 srtc_name = "LabPyTest"

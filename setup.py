@@ -50,7 +50,7 @@ setuptools.setup(
                             "larklauncher=lark.bin:launcher",
                             "larkplot=lark.bin:larkplot",
                             "resetDaemon=lark.daemon:resetDaemon",
-                            "laserpulse=lark.laserpulse:main"
+                            "laserpulse=lark.laserpulse:main",
                             ],
     },
     ext_modules=[
