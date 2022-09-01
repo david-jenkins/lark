@@ -2,13 +2,13 @@
 
 typedef struct CParamBuff CParamBuff;
 
-inline PyObject *
+PyObject *
 makePyFromBufVal(bufferVal *bval);
 
-inline bufferVal *
+bufferVal *
 makeBufValFromPy(PyObject *value);
 
-inline int
+int
 switchBuffer(paramBuf *pbufs[2], int wait);
 
 int

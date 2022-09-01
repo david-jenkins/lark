@@ -3,6 +3,7 @@ import setuptools
 import numpy
 
 DEBUG_BUILD = 0
+DARC_DIR = "darc/"  # uses copies of darc files included here, allows building and installing without a supported darc installed
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -35,7 +36,8 @@ setuptools.setup(
           'matplotlib',
           'scipy',
           'astropy',
-          'toml'
+          'toml',
+          'numa',
       ],
     dependency_links=['git+git://github.com/pyqtgraph/pyqtgraph.git@master'],
     entry_points = {
@@ -48,6 +50,7 @@ setuptools.setup(
                             "larklauncher=lark.bin:launcher",
                             "larkplot=lark.bin:larkplot",
                             "resetDaemon=lark.daemon:resetDaemon",
+                            "laserpulse=lark.laserpulse:main"
                             ],
     },
     ext_modules=[
@@ -56,24 +59,24 @@ setuptools.setup(
                 depends=["lark/ccircmodule.h"],
                 define_macros=[('DEBUG', DEBUG_BUILD)],
                 libraries=['rt','zmq'],
-                extra_objects=["/opt/darc/lib/circ.o","/opt/darc/lib/mutex.o"],
-                include_dirs=["/opt/darc/include/",numpy.get_include()],
-                library_dirs = ['/opt/darc/lib']),
+                extra_objects=[DARC_DIR+"src/circ.o",DARC_DIR+"src/mutex.o"],
+                include_dirs=[DARC_DIR+"include/",numpy.get_include()],
+                ),
         setuptools.Extension("lark.cbuffer",
                 sources=["lark/cbuffermodule.c"],
                 depends=["lark/cbuffermodule.h"],
                 define_macros=[('DEBUG', DEBUG_BUILD)],
                 libraries=['rt'],
-                extra_objects=["/opt/darc/lib/buffer.o"],
-                include_dirs=["/opt/darc/include/",numpy.get_include()],
-                library_dirs = ['/opt/darc/lib']),
+                extra_objects=[DARC_DIR+"src/buffer.o"],
+                include_dirs=[DARC_DIR+"include/",numpy.get_include()],
+                ),
         setuptools.Extension("lark.darc.utils",
                 sources=["lark/darc/utils.c"],
                 define_macros=[('DEBUG', DEBUG_BUILD)],
                 libraries=['rt'],
-                extra_objects=["/opt/darc/lib/mutex.o"],
-                include_dirs=["/opt/darc/include/",numpy.get_include()],
-                library_dirs = ['/opt/darc/lib']),
+                extra_objects=[DARC_DIR+"src/mutex.o"],
+                include_dirs=[DARC_DIR+"include/",numpy.get_include()],
+                ),
     ],
 )
 

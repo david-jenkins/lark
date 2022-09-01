@@ -1,5 +1,5 @@
 
-BUILDDIR=build
+BUILDDIR=/tmp/djenkins/build
 LARK_DIR=/opt/lark
 VENV_NAME=pylark
 LARK_VENV=$(LARK_DIR)/$(VENV_NAME)/bin/activate
@@ -7,13 +7,14 @@ export
 
 canapy: centos75 python310_c75
 
-latte: ubuntu1804 python310 _venv_notification
+latte: ubuntu1804 python310_all _venv_notification
 
 install: larkinstall-venv system
 	$(MAKE) -C services install
 	$(MAKE) -C system/centos-cfg install
 
 build: lark/ccircmodule.c lark/ccircmodule.h lark/cbuffermodule.c lark/cbuffermodule.h
+	$(MAKE) -C darc all
 	python3 setup.py build_ext --inplace
 
 larkinstall-venv: build
@@ -64,15 +65,17 @@ group_dir_setup:
 	sudo chgrp -R lark $(LARK_DIR)
 	sudo chmod g+rwxs,a+rwX $(LARK_DIR)
 
-_python: group_dir_setup
-	test -d $(BUILDDIR) || mkdir $(BUILDDIR)
-	cd $(BUILDDIR) && wget https://www.python.org/ftp/python/$(LONG_VER)/Python-$(LONG_VER).tgz
-	cd $(BUILDDIR) && tar -xzvf Python-$(LONG_VER).tgz && rm -f Python-$(LONG_VER).tgz
-	cd $(BUILDDIR)/Python-$(LONG_VER) && ./configure --with-ensurepip=install
-	cd $(BUILDDIR)/Python-$(LONG_VER) && make -j 8 && sudo make altinstall
+_python_venv: group_dir_setup
 	cd $(LARK_DIR) && /usr/local/bin/python$(SHORT_VER) -m venv $(VENV_NAME)
 	. $(LARK_VENV) && pip install --upgrade pip
 	. $(LARK_VENV) && pip install -r requirements.txt
+
+_python:
+	test -d $(BUILDDIR) || mkdir -p $(BUILDDIR)
+	cd $(BUILDDIR) && wget https://www.python.org/ftp/python/$(LONG_VER)/Python-$(LONG_VER).tgz
+	cd $(BUILDDIR) && tar -xzvf Python-$(LONG_VER).tgz
+	cd $(BUILDDIR)/Python-$(LONG_VER) && ./configure --with-ensurepip=install
+	cd $(BUILDDIR)/Python-$(LONG_VER) && make -j 8 && sudo make altinstall
 
 _venv_notification:
 	@echo "Before continuing with Lark install, please source the virtual environment"
@@ -82,23 +85,30 @@ python38: LONG_VER=3.8.8
 python38: SHORT_VER=3.8
 python38: _python
 
+python38_all: LONG_VER=3.8.8
+python38_all: SHORT_VER=3.8
+python38_all: _python _python_venv
+
 python310: LONG_VER=3.10.5
 python310: SHORT_VER=3.10
 python310: _python
 
-python310_c75:
+python310_all: LONG_VER=3.10.5
+python310_all: SHORT_VER=3.10
+python310_all: _python _python_venv
+	
+
+_python_c75:
 	test -d $(BUILDDIR) || mkdir $(BUILDDIR)
-	cd $(BUILDDIR) && wget https://www.python.org/ftp/python/3.10.5/Python-3.10.5.tgz
-	cd $(BUILDDIR) && tar -xzvf Python-3.10.5.tgz
-	cd $(BUILDDIR)/Python-3.10.5 && sed -i 's/PKG_CONFIG openssl /PKG_CONFIG openssl11 /g' configure
-	cd $(BUILDDIR)/Python-3.10.5 && ./configure --with-ensurepip=install
-	cd $(BUILDDIR)/Python-3.10.5 && make -j 8
-	cd $(BUILDDIR)/Python-3.10.5 && sudo make altinstall
-	sudo mkdir $(LARK_DIR)
-	sudo chmod -R a+rwx $(LARK_DIR)
-	cd /opt/lark && /usr/local/bin/python3.10 -m venv $(VENV_NAME)
-	. $(LARK_VENV) && pip install --upgrade pip
-	. $(LARK_VENV) && pip install -r requirements.txt
+	cd $(BUILDDIR) && wget https://www.python.org/ftp/python/$(LONG_VER)/Python-$(LONG_VER).tgz
+	cd $(BUILDDIR) && tar -xzvf Python-$(LONG_VER).tgz
+	cd $(BUILDDIR)/Python-$(LONG_VER) && sed -i 's/PKG_CONFIG openssl /PKG_CONFIG openssl11 /g' configure
+	cd $(BUILDDIR)/Python-$(LONG_VER) && ./configure --with-ensurepip=install
+	cd $(BUILDDIR)/Python-$(LONG_VER) && make -j 8 && sudo make altinstall
+
+python310_c75: LONG_VER=3.10.5
+python310_c75: SHORT_VER=3.10
+python310_c75: _python_c75 _python_venv
 
 clean:
 	rm -rf $(BUILDDIR)

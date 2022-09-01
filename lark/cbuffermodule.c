@@ -652,7 +652,7 @@ PyInit_cbuffer(void)
     return m;
 }
 
-inline int
+int
 switchBuffer(paramBuf *pbufs[2], int wait) {
     // printf("Switch buffer...\n");
     bufferVal *bval;
@@ -676,7 +676,7 @@ switchBuffer(paramBuf *pbufs[2], int wait) {
     return 0;
 }
 
-inline PyObject *
+PyObject *
 makePyFromBufVal(bufferVal *bval){
 
     int i;
@@ -751,7 +751,7 @@ makePyFromBufVal(bufferVal *bval){
     return PyArray_Return(retarr);
 }
 
-inline bufferVal *
+bufferVal *
 makeBufValFromPy(PyObject *value)
 {
     int i,ival;
