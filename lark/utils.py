@@ -592,13 +592,13 @@ def import_from(file_path: Path):
     MANUAL_MODULES[str(file_path)] = foo
     return foo
 
-def var_from_file(var_name, file_path: Path):
+def var_from_file(var_name, file_path: Path, **kwargs):
     if not isinstance(file_path, Path):
         file_path = Path(file_path).expanduser().resolve()
-    return var_from_text(var_name, file_path.read_text(), file_path)
+    return var_from_text(var_name, file_path.read_text(), file_path, **kwargs)
 
-def var_from_text(var_name, code: str, file_path=None):
-    values = {"__file__":file_path}
+def var_from_text(var_name, code: str, file_path=None, **kwargs):
+    values = dict(__file__=file_path,**kwargs)
     exec(code,values,values)
     return values[var_name]
 

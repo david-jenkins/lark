@@ -13,7 +13,7 @@ from ..utils import statusBuf_tostring
 from .widgets.main_base import SubTabWidget
 
 class TelemetryControl(TelemetryControl_base):
-    def __init__(self,larkconfig,parent=None):
+    def __init__(self, larkconfig:LarkConfig, parent=None):
         TelemetryControl_base.__init__(self,parent=parent)
         self.larkconfig = larkconfig
         self.stream_tree.setLarkConfig(larkconfig)
@@ -23,21 +23,26 @@ class TelemetryControl(TelemetryControl_base):
         self.timer.timeout.connect(self.on_refresh)
 
     def on_connect(self):
-        self.stream_tree.reset()
-        status = self.larkconfig.getlark().streamStatus()
-        info = self.larkconfig.getlark().streamInfo()
-        self.stream_tree.setStreams(status.keys())
-        for stream,value in status.items():
-            self.stream_tree.connectStream(stream,value,info[stream])
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            self.stream_tree.reset()
+            status = lrk.streamStatus()
+            info = lrk.streamInfo()
+            self.stream_tree.setStreams(status.keys())
+            for stream,value in status.items():
+                self.stream_tree.connectStream(stream,value,info[stream])
 
     def on_refresh(self):
         try:
-            self.larkconfig.getlark()
+            lrk = self.larkconfig.getlark()
         except NoLarkError:
             print("No lark available")
         else:
-            status = self.larkconfig.getlark().streamStatus()
-            info = self.larkconfig.getlark().streamInfo()
+            status = lrk.streamStatus()
+            info = lrk.streamInfo()
             for stream,value in status.items():
                 self.stream_tree.updateStream(stream,value,info[stream])
 
@@ -94,7 +99,7 @@ class StatusDisplay(Plotter):
         super(Plotter, self).hideEvent(event)
 
 class TelemetryMain(SubTabWidget):
-    def __init__(self,larkconfig,parent=None):
+    def __init__(self,larkconfig,parent=None,**kwargs):
         super().__init__(parent=parent)
         self.larkconfig = larkconfig
 
@@ -133,12 +138,12 @@ def main():
         sys.exit()
     try:
         larkconfig.getlark()
-    except Exception as e:
+    except NoLarkError as e:
         print(e)
         sys.exit()
-    from .main import MainWindow
+    from .main import MainLarkWindow
     app = QtW.QApplication(sys.argv)
-    win = MainWindow(larkconfig,TelemetryMain,TelemetryMain)
+    win = MainLarkWindow(larkconfig, TelemetryMain)
     win.setWindowTitle("Telemetry")
     win.on_connect()
     win.show()

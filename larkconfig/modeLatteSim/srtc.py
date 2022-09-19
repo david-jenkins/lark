@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Union
 from lark.utils import appendSimpleDict, make_data_dirs, saveDict, saveDictDiff, saveSimpleDict
 import numpy
-from lark import LarkConfig
+from lark import LarkConfig, NoLarkError
 from lark.services import BaseService, BasePlugin
 
 class CanapySrtc(BaseService):
@@ -51,16 +51,20 @@ class DataSaver(BasePlugin):
 
     def Setup(self):
         if self["prefixes"]:
-            self.larks = {prefix:LarkConfig(prefix).getlark(unique=True) for prefix in self["prefixes"]}
-        if self.first_run and self.larks and self["srtcname"]:
-            self.params = {prefix:lrk.getChanges(True) for prefix,lrk in self.larks.items()}
-            self.srtcdir,self.prefixdirs,self.tstamp = make_data_dirs(self["srtcname"],self["prefixes"])
-            self.srtcinfofile = saveSimpleDict({"name":self["srtcname"]},self.srtcdir/"info")
-            print(self.srtcdir,self.prefixdirs,self.tstamp)
-            for prefix,params in self.params.items():
-                self.prefixdirs[prefix] = saveDict(params[list(params.keys())[1]],self.prefixdirs[prefix]/self.prefixdirs[prefix].name)
-                self.saved[prefix] = []
-            self.first_run = False
+            try:
+                self.larks = {prefix:LarkConfig(prefix).getlark(unique=True) for prefix in self["prefixes"]}
+            except NoLarkError as e:
+                print(e)
+            else:
+                if self.first_run and self.larks and self["srtcname"]:
+                    self.params = {prefix:lrk.getChanges(True) for prefix,lrk in self.larks.items()}
+                    self.srtcdir,self.prefixdirs,self.tstamp = make_data_dirs(self["srtcname"],self["prefixes"])
+                    self.srtcinfofile = saveSimpleDict({"name":self["srtcname"]},self.srtcdir/"info")
+                    print(self.srtcdir,self.prefixdirs,self.tstamp)
+                    for prefix,params in self.params.items():
+                        self.prefixdirs[prefix] = saveDict(params[list(params.keys())[1]],self.prefixdirs[prefix]/self.prefixdirs[prefix].name)
+                        self.saved[prefix] = []
+                    self.first_run = False
 
     def Acquire(self):
         self.changes = {prefix:lrk.getChanges() for prefix,lrk in self.larks.items()}
@@ -189,7 +193,10 @@ class CenterPyr(BasePlugin):
         return super().Configure(**kwargs)
 
     def Setup(self):
-        self.lark = LarkConfig(self["prefix"]).getlark()
+        try:
+            self.lark = LarkConfig(self["prefix"]).getlark()
+        except NoLarkError as e:
+            print(e)
 
     def Acquire(self):
         n_img = self["n_img"]
@@ -247,7 +254,10 @@ class QuadCellPyr(BasePlugin):
         super().Configure(**kwargs)
 
     def Setup(self):
-        self.lark = LarkConfig(self["prefix"]).getlark()
+        try:
+            self.lark = LarkConfig(self["prefix"]).getlark()
+        except NoLarkError as e:
+            print(e)
 
     def Acquire(self):
         from lark.interface import asyncfunc
@@ -354,7 +364,10 @@ class TakeBackground(BasePlugin):
         return super().Configure(**kwargs)
 
     def Setup(self):
-        self.lark = LarkConfig(self["prefix"]).getlark()
+        try:
+            self.lark = LarkConfig(self["prefix"]).getlark()
+        except NoLarkError as e:
+            print(e)
 
     def Acquire(self):
         n_img = self["n_img"]

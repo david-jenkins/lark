@@ -7,6 +7,8 @@ pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 import numpy
 
+PHOTONS_PER_S_PER_M2_PER_WATT = PSM2W = 600000.0
+DUTY33_INT_TIME_MUS = 57.0
 
 c_m = 299705000
 l = 1000

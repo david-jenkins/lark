@@ -7,7 +7,6 @@ from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
 
-import lark
 from lark import LarkConfig, NoLarkError
 from lark.interface import connectDaemon
 
@@ -44,12 +43,12 @@ class RemoteFilePicker(QtW.QDialog):
 
         self.dirname = None
         try:
-            lark = self.larkconfig.getlark()
-        except NoLarkError:
-            print("No lark available")
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
             self.dirlist.addItem("No Lark available")
         else:
-            self.files = lark.getDataDir()
+            self.files = lrk.getDataDir()
             self.new_files()
             self.dirlist.doubleClicked.connect(self.dblclck_callback)
             self.dirlist.clicked.connect(self.clck_callback)
@@ -78,47 +77,55 @@ class RemoteFilePicker(QtW.QDialog):
 
     def dblclck_callback(self):
         name = self.dirlist.currentItem().text()
-        lark = self.larkconfig.getlark()
-        if name=="(Up a Level)":
-            if self.dirname == self.basedir:
-                return
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            if name=="(Up a Level)":
+                if self.dirname == self.basedir:
+                    return
+                else:
+                    tmp = PurePath(self.dirname).parent.relative_to(self.basedir)
+                    self.files = lrk.getDataDir(str(tmp))
             else:
-                tmp = PurePath(self.dirname).parent.relative_to(self.basedir)
-                self.files = lark.getDataDir(str(tmp))
-        else:
-            tmp = (PurePath(self.dirname)/name).relative_to(self.basedir)
-            self.files = lark.getDataDir(str(tmp))
-        if isinstance(self.files,str):
-            self.fname = self.files
-            self.accept()
-        elif self.files is None:
-            self.fname = ""
-            self.dirname = ""
-            self.reject()
-        else:
-            self.new_files()
+                tmp = (PurePath(self.dirname)/name).relative_to(self.basedir)
+                self.files = lrk.getDataDir(str(tmp))
+            if isinstance(self.files,str):
+                self.fname = self.files
+                self.accept()
+            elif self.files is None:
+                self.fname = ""
+                self.dirname = ""
+                self.reject()
+            else:
+                self.new_files()
 
     def clck_callback(self):
         name = self.dirlist.currentItem().text()
-        lark = self.larkconfig.getlark()
-        if name=="(Up a Level)":
-            if self.dirname == self.basedir:
-                return
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            if name=="(Up a Level)":
+                if self.dirname == self.basedir:
+                    return
+                else:
+                    tmp = PurePath(self.dirname).parent.relative_to(self.basedir)
+                    self.files = lrk.getDataDir(str(tmp))
             else:
-                tmp = PurePath(self.dirname).parent.relative_to(self.basedir)
-                self.files = lark.getDataDir(str(tmp))
-        else:
-            self.fname = self.dirname+"/"+name
-            return
-        if isinstance(self.files,str):
-            self.fname = self.files
-            self.accept()
-        elif self.files is None:
-            self.fname = ""
-            self.dirname = ""
-            self.reject()
-        else:
-            self.new_files()
+                self.fname = self.dirname+"/"+name
+                return
+            if isinstance(self.files,str):
+                self.fname = self.files
+                self.accept()
+            elif self.files is None:
+                self.fname = ""
+                self.dirname = ""
+                self.reject()
+            else:
+                self.new_files()
 
     def select_callback(self):
         self.accept()
@@ -159,14 +166,14 @@ class RemoteFilePicker(QtW.QDialog):
         self.basedir = ""
         self.fname = ""
         try:
-            lark = self.larkconfig.getlark()
-        except NoLarkError:
-            print("No lark available")
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
             tmp = QtW.QTreeWidgetItem(self.dirlist)
             tmp.setText(0,"No Lark available")
             self.items.append(tmp)
         else:
-            self.files = lark.getDataDir()
+            self.files = lrk.getDataDir()
             self.new_files(self.dirlist)
             self.basedir = self.files["name"]
             self.fname = self.basedir
@@ -204,20 +211,25 @@ class RemoteFilePicker(QtW.QDialog):
         item = self.dirlist.currentItem()
         if item.populated:
             return
-        name = item.text(0)
-        print(f"NAME IS {name}")
-        print(f"THIS {item.dirname} - {self.basedir}")
-        tmp = (PurePath(item.dirname)/name).relative_to(self.basedir)
-        self.files = self.larkconfig.getlark().getDataDir(tmp)
-        print("got files", self.files)
-        if isinstance(self.files,str):
-            self.fname = self.files
-            self.accept()
-        elif self.files is None:
-            self.fname = ""
-            self.reject()
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         else:
-            self.new_files(self.dirlist.currentItem())
+            name = item.text(0)
+            print(f"NAME IS {name}")
+            print(f"THIS {item.dirname} - {self.basedir}")
+            tmp = (PurePath(item.dirname)/name).relative_to(self.basedir)
+            self.files = lrk.getDataDir(tmp)
+            print("got files", self.files)
+            if isinstance(self.files,str):
+                self.fname = self.files
+                self.accept()
+            elif self.files is None:
+                self.fname = ""
+                self.reject()
+            else:
+                self.new_files(self.dirlist.currentItem())
 
     def clck_callback(self):
         print("CLICK")
@@ -399,11 +411,11 @@ class TestWidget(QtW.QWidget):
 
     def callback(self):
         try:
-            lark = self.larkconfig.getlark()
-        except NoLarkError:
-            print("No lark available")
+            self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         else:
-            d = RemoteFilePicker(self.larkconfig,self)#,dirs_only=True)
+            d = RemoteFilePicker(self.larkconfig, self)#,dirs_only=True)
             answer = d.exec()
             if answer:
                 print(d.fname)

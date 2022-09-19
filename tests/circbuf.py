@@ -8,7 +8,7 @@ from astropy.io import fits
 import lark.utils
 from lark import LarkConfig
 
-from lark.configLoader import DATA_DIR
+from lark.configLoader import get_lark_config
 
 from lark.circbuf import CircReader, TelemetrySystem
 

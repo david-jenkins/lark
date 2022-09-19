@@ -16,7 +16,7 @@ from .. import control
 from .. import check
 from .. import utils
 from .widgets.control_base import Daemon_base, DarcControl_base, AOControl_base
-from .. import configLoader
+from ..configLoader import get_lark_config
 from .widgets.main_base import SubTabWidget
 from .widgets.misc import DarcSelector, LocalFileFollower
 from lark.display.widgets.misc import LogFileTailer
@@ -68,19 +68,21 @@ class DaemonWidget(Daemon_base):
         }
         self.options_tree.setData(self.darc_options)
         self.options_tree.installEventFilter(self)
-        self.prefix_setter.set_value(configLoader.DEFAULT_PREFIX)
-        host = get_registry_parameters()["hostname"]
+        self.prefix_setter.set_value(get_lark_config().DEFAULT_PREFIX)
+        host = get_registry_parameters().RPYC_HOSTNAME
         self.host_setter.set_value(host)
 
-        self.larkconfig.prefix = configLoader.DEFAULT_PREFIX
+        self.larkconfig.prefix = get_lark_config().DEFAULT_PREFIX
         self.larkconfig.hostname = host
         self.connected = 0
 
         self.params = None
+        self.configs = []
 
         # self.show_config(False)
         self.show_param(False)
         self.show_darc(False)
+        self.config_dir = Path(get_lark_config().CONFIG_DIR)
         self.setup_config()
 
         # install event filters
@@ -104,12 +106,14 @@ class DaemonWidget(Daemon_base):
         self.host_setter.set_value(value, True)
 
     def darc_callback(self, value):
+        print("chosen prefix",value)
         self.prefix_setter.set_value(value, True)
 
     def prefix_callback(self, value):
         self.larkconfig.closelark()
         self.larkconfig.prefix = value
         try:
+            print("trying to connect to", self.larkconfig.prefix)
             self.larkconfig.getlark()
         except NoLarkError as e:
             self.print(e)
@@ -132,17 +136,24 @@ class DaemonWidget(Daemon_base):
         self.darc_chooser.set_host(value)
 
     def on_connect(self):
-        self.connected = 1
-        self.params = self.larkconfig.getlark().getMany(self.larkconfig.getlark().getLabels())
-        self.config_callback()
-        self.larkConnected.emit()
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            self.connected = 1
+            self.params = lrk.getAll()
+            self.config_callback()
+            self.larkConnected.emit()
 
     def show_config(self,show=True):
         self.config_menu.setEnabled(show)
         self.selectconfig_button.setEnabled(show)
 
     def setup_config(self):
-        self.config_dir = Path(configLoader.CONFIG_DIR)
+        if not self.config_dir.exists():
+            print("Config dir not existing")
+            return
         self.configs = []
         def addConfigs(dir):
             files = dir.iterdir()
@@ -198,17 +209,22 @@ class DaemonWidget(Daemon_base):
 
     def refreshparams_callback(self):
         try:
-            self.larkconfig.getlark()
+            lrk = self.larkconfig.getlark()
         except NoLarkError:
             print("No lark available")
         else:
             self.param_tree.clear()
             QtC.QCoreApplication.processEvents()
-            self.params = self.larkconfig.getlark().getMany(self.larkconfig.getlark().getLabels())
+            self.params = lrk.getAll()
             self.param_tree.setData(self.params)
 
     def saveparams_callback(self):
-        self.larkconfig.getlark().save()
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            lrk.save()
 
     def show_darc(self,show=True):
         self.startdarc_button.setEnabled(show)
@@ -227,10 +243,11 @@ class DaemonWidget(Daemon_base):
 
     def reinit_callback(self):
         try:
-            lark = self.larkconfig.getlark()
-            lark.configure_from_dict(self.params)
-        except Exception as e:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
             print(e)
+        else:
+            lrk.configure_from_dict(self.params)
 
     def setparam_callback(self):
         self.param_setter.show()
@@ -238,32 +255,31 @@ class DaemonWidget(Daemon_base):
     def getparam_callback(self):
         self.param_viewer.show()
 
-    def parameterSet_callback(self,name,value):
+    def parameterSet_callback(self, name, value):
         try:
-            self.larkconfig.getlark()
-        except NoLarkError:
-            print("No lark available")
-        else:
-            retval = self.larkconfig.getlark().set(name,value)
-            print(retval)
-        if isinstance(retval,str):
-            self.print(f"Error: {retval}")
-            return
-        self.params[name] = value
-        try:
-            self.param_tree.update(name,value)
-        except KeyError as e:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
             print(e)
+        else:
+            retval = lrk.set(name, value)
+            if isinstance(retval, str):
+                self.print(f"Error: {retval}")
+                return
+            self.params[name] = value
+            try:
+                self.param_tree.update(name,value)
+            except KeyError as e:
+                print(e)
 
     def stopdarc_callback(self):
         try:
-            self.larkconfig.getlark()
-        except NoLarkError:
-            print("No lark available")
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         else:
             err = ""
             try:
-                self.larkconfig.getlark().stop()
+                lrk.stop()
             except EOFError as e:
                 err = e
             self.larkconfig.closelark()
@@ -271,33 +287,38 @@ class DaemonWidget(Daemon_base):
             self.show_darc(False)
             self.switch_startdarc(True)
             self.startdarc_button.setEnabled(True)
-            self.print(f"Stopped: {self.larkconfig.prefix}",err)
+            self.print(f"Stopped: {self.larkconfig.prefix} {err}")
         self.larkDisconnected.emit()
 
     def selectconfig_callback(self):
         # choose file
-        get_name = QtW.QFileDialog.getOpenFileName(self, 'Open Config', (str(self.config_dir)),"Python Files (*.py)",options=QtW.QFileDialog.DontUseNativeDialog)
-        fname = get_name[0]
-        if fname != "":
-            file = Path(fname)
-            if file.suffix == ".py" and file.stem[:6] == "config":
-                self.configs.append(file)
-                self.config_menu.addItem(file.stem[6:])
-                self.config_menu.setCurrentIndex(self.configs.index(file))
-                self.config_callback(self.config_menu.currentIndex())
-                self.show_config()
+        # get_name = QtW.QFileDialog.getOpenFileName(self, 'Open Config', (str(self.config_dir)),"Python Files (*.py)",options=QtW.QFileDialog.DontUseNativeDialog)
+        # fname = get_name[0]
+        # if fname != "":
+        #     file = Path(fname)
+        #     if file.suffix == ".py" and file.stem[:6] == "config":
+        #         self.configs.append(file)
+        #         self.config_menu.addItem(file.stem[6:])
+        #         self.config_menu.setCurrentIndex(self.configs.index(file))
+        #         self.config_callback(self.config_menu.currentIndex())
+        #         self.show_config()
+        get_dir = QtW.QFileDialog.getExistingDirectory(self, "Choose Config Directory", str(Path.home()))
+        if get_dir == "":
+            return
+        self.config_dir = Path(get_dir)
+        self.setup_config()
 
     def validateparams_callback(self):
         pass
 
     def status_callback(self):
         try:
-            self.larkconfig.getlark()
-        except NoLarkError:
-            print("No lark available")
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         else:
             try:
-                data = self.larkconfig.getlark().getStreamBlock("rtcStatusBuf",1)
+                data = lrk.getStreamBlock("rtcStatusBuf",1)
             except EOFError as e:
                 self.print(e)
                 self.stopdarc_callback()
@@ -367,26 +388,31 @@ class DarcControlWidget(DarcControl_base):
 
     def on_connect(self):
         self.status_callback()
-        self.params = self.larkconfig.getlark().getMany(self.larkconfig.getlark().getLabels())
-        self.param_tree.setData(self.params)
-        self.larkConnected.emit()
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            self.params = lrk.getAll()
+            self.param_tree.setData(self.params)
+            self.larkConnected.emit()
 
     def on_first_start(self):
         try:
             self.larkconfig.getlark()
         except NoLarkError as e:
-            pass
+            print(e)
         else:
             self.prefix_setter.set_value(self.larkconfig.prefix,True)
 
     def status_callback(self):
         try:
-            self.larkconfig.getlark()
-        except NoLarkError:
-            print("No lark available")
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         else:
             try:
-                data = self.larkconfig.getlark().getStreamBlock("rtcStatusBuf",1)
+                data = lrk.getStreamBlock("rtcStatusBuf",1)
             except EOFError as e:
                 self.print(e)
                 self.stopdarc_callback()
@@ -402,13 +428,13 @@ class DarcControlWidget(DarcControl_base):
         ans = qm.question(self,'', "Are you sure you want to stop DARC?", qm.Yes | qm.No)
         if ans == qm.Yes:
             try:
-                self.larkconfig.getlark()
-            except NoLarkError:
-                self.print("No lark available")
+                lrk = self.larkconfig.getlark()
+            except NoLarkError as e:
+                self.print(e)
             else:
                 err = ""
                 try:
-                    self.larkconfig.getlark().stop()
+                    lrk.stop()
                 except EOFError as e:
                     err = e
                 self.larkconfig.closelark()
@@ -419,19 +445,19 @@ class DarcControlWidget(DarcControl_base):
         self.print("setting",name,"to",value)
         self.print("setting",type(name),"to",type(value),clear=False)
         try:
-            self.larkconfig.getlark()
-        except NoLarkError:
-            self.print("No lark available")
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            self.print(e)
         else:
-            retval = self.larkconfig.getlark().set(name,value)
-        if isinstance(retval,str):
-            self.print(f"Error: {retval}",clear=False)
-            return
-        self.params[name] = value
-        try:
-            self.param_tree.update(name,value)
-        except KeyError as e:
-            print(e)
+            retval = lrk.set(name,value)
+            if isinstance(retval,str):
+                self.print(f"Error: {retval}",clear=False)
+                return
+            self.params[name] = value
+            try:
+                self.param_tree.update(name,value)
+            except KeyError as e:
+                print(e)
 
         self.print(self.params["rmx"],clear=False)
 
@@ -446,11 +472,11 @@ class DarcControlWidget(DarcControl_base):
 
     def refresh_callback(self):
         try:
-            self.larkconfig.getlark()
-        except NoLarkError:
-            print("No lark available")
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         else:
-            self.params = self.larkconfig.getlark().getMany(self.larkconfig.getlark().getLabels())
+            self.params = lrk.getAll()
             self.param_tree.clear()
             self.param_tree.setData(self.params)
 
@@ -486,36 +512,28 @@ class DarcMainPrint(LocalFileFollower):
         fpath = Path("/dev/shm")/f"{larkconfig.prefix}rtcStdout0"
         super().__init__(file_name=fpath,parent=parent)
 
-
-# class ControlMain(QtW.QWidget):
-#     def __init__(self,parent=None):
-#         QtW.QWidget.__init__(self,parent=parent)
-#         self.lay = QtW.QVBoxLayout()
-#         self.daemon = DaemonQt(parent=self)
-#         self.control = ControlQt(parent=self)
-#         self.lay.addWidget(self.daemon)
-#         self.lay.addWidget(self.control)
-#         self.setLayout(self.lay)
-
-
-class ControlPlot(SubTabWidget):
-    def __init__(self, larkconfig, parent=None):
+class ControlGui(SubTabWidget):
+    def __init__(self, larkconfig, parent=None, daemon_controls=True):
         super().__init__(parent=parent)
         self.larkconfig = larkconfig
 
         self.menu.setTitle("DARC")
+        
+        if daemon_controls:
+            self.daemon = DaemonWidget(self.larkconfig, parent=self)
+            self.addWidget(self.daemon, "Daemon")
 
-        self.control = DarcControlWidget(self.larkconfig,parent=self)
-        self.ao = AOControlWidget(self.larkconfig,parent=self)
+        self.control = DarcControlWidget(self.larkconfig, parent=self)
+        self.ao = AOControlWidget(self.larkconfig, parent=self)
         # self.print = DarcMainPrint(self.larkconfig,parent=self)
-        host = get_registry_parameters()["hostname"]
-        self.print = LogFileTailer(host,dir="/dev/shm",filter=".log")
-        self.logprint = LogFileTailer(host,parent=self)
+        host = get_registry_parameters().RPYC_HOSTNAME
+        self.print = LogFileTailer(host, dir="/dev/shm", filter=".log")
+        self.logprint = LogFileTailer(host, parent=self)
 
         self.addWidget(self.control, "Control")
         self.addWidget(self.ao, "AO Control")
-        self.addWidget(self.print,"darcmain")
-        self.addWidget(self.logprint,"Logging")
+        self.addWidget(self.print, "darcmain")
+        self.addWidget(self.logprint, "Logging")
 
     def on_first_start(self):
         self.control.on_first_start()
@@ -523,18 +541,12 @@ class ControlPlot(SubTabWidget):
     def on_connect(self):
         self.ao.on_connect()
 
-class ControlGui(ControlPlot):
-    """A wrapper around ControlPlot to insert the daemon widget at index zero"""
-    def __init__(self, larkconfig, parent=None):
-        super().__init__(larkconfig, parent=parent)
-        daemon = DaemonWidget(self.larkconfig,parent=self)
-        self.insertWidget(0,daemon,"Daemon")
-        self.setCurrentIndex(0)
-
 def main():
     from .widgets.main_base import MainWindow
     app = QtW.QApplication(sys.argv)
-    win = MainWindow(ControlGui)
+    widg = ControlGui()
+    win = MainWindow()
+    win.setCentralWidget(widg)
     win.setWindowTitle("Control")
     win.show()
     sys.exit(app.exec_())

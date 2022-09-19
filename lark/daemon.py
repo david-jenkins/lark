@@ -21,7 +21,7 @@ import logging
 import signal
 
 from .interface import ControlClient, RemoteService, startControl, startService
-from lark import configLoader
+from lark.configLoader import get_lark_config
 
 def larkstarter(prefix, hostname):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -299,7 +299,7 @@ class LarkDaemon:
     def listDir(self, dir="", use_data_dir=False):
         tmp = Path(dir)
         if use_data_dir:
-            tmp = Path(configLoader.DATA_DIR)/dir
+            tmp = Path(get_lark_config().DATA_DIR)/dir
         if not tmp.is_dir():
             if tmp.exists():
                 return str(tmp)
@@ -321,7 +321,7 @@ def startDaemon():
     #     with redirect_stdout(f):
     
     registry = get_registry_parameters()
-    name = registry["hostname"] + "_Daemon"
+    name = registry.RPYC_HOSTNAME + "_Daemon"
     
     logger = getLogger(name)
     logger.setLevel("DEBUG")
@@ -355,14 +355,14 @@ def startDaemon():
                 
 def resetAll():
     registry = get_registry_parameters()
-    d:LarkDaemon = connectDaemon(registry["hostname"])
+    d:LarkDaemon = connectDaemon(registry.RPYC_HOSTNAME)
     d.shutdown()
     
 def resetDaemon():
     if len(sys.argv) > 1:
         daemon = sys.argv[1]
     else:
-        daemon = get_registry_parameters()["hostname"]
+        daemon = get_registry_parameters().RPYC_HOSTNAME
     d:LarkDaemon = connectDaemon(daemon)
     d.shutdown()
     

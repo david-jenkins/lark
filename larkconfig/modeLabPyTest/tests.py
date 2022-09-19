@@ -4,7 +4,7 @@
 """
 
 # import cv2
-from lark import LarkConfig
+from lark import LarkConfig, NoLarkError
 from lark.services import BaseService, BasePlugin
 import numpy
 
@@ -15,7 +15,7 @@ class CanapyDiagnostics(BaseService):
     def notify(self, *args):
         print(*args)
 
-from lark.tests.wfs import darc_pyr_slopes
+from lark.tools.wfs_sim import darc_pyr_slopes
 
 @CanapyDiagnostics.register_plugin("pyr_slopes")
 class CheckPyrSlopes(BasePlugin):
@@ -38,8 +38,10 @@ class CheckPyrSlopes(BasePlugin):
         super().Configure(**kwargs)
 
     def Setup(self):
-        self.lark = LarkConfig(self["prefix"]).getlark()
-        pass
+        try:
+            self.lark = LarkConfig(self["prefix"]).getlark()
+        except NoLarkError as e:
+            print(e)
 
     def Acquire(self):
         n_img = self["n_img"]

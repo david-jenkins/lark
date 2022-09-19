@@ -1,32 +1,36 @@
 
 from copy import copy
+from dataclasses import dataclass
 from distutils.dir_util import remove_tree
 from pathlib import Path
 import toml
 
 HERE = Path(__file__).parent.parent.resolve()
 
+cfile = Path("/etc/lark.cfg")
+
 # print(HERE)
 # print(Path.home())
 
-# default config
-defaults = {
-    "DATA_DIR": "/tmp/larkdata",
-    "CONFIG_DIR": Path.home()/"lark/config", # this means that for each user that opens the GUI, they will see a different default config, this can be changes in /etc/lark.cfg
-    # "CONFIG_DIR": HERE/"conf",
-    "TELEMETRY_IP": "localhost",
-    "TELEMETRY_PORT": 18761,
-    "DEFAULT_PREFIX": "lark",
-}
-
-config = copy(defaults)
+@dataclass
+class Config:
+    DATA_DIR:Path = Path("/tmp/larkdata")
+    CONFIG_DIR:Path = Path.home()/"lark/config"
+    # CONFIG_DIR:Path = HERE/"conf"
+    TELEMETRY_IP:str = "localhost"
+    TELEMETRY_PORT:int = 18761
+    DEFAULT_PREFIX:str = "lark"
 
 # read config at /etc/lark.cfg
-cfile = Path("/etc/lark.cfg")
-if cfile.exists():
-    config.update(toml.load(cfile)["general"])
+def get_lark_config(reload:bool = False) -> Config:
+    if get_lark_config.config is None or reload:
+        from_file = {}
+        if cfile.exists():
+            from_file = toml.load(cfile)["general"]
+        get_lark_config.config = Config(**from_file)
+    return get_lark_config.config
 
-
+get_lark_config.config = None
 # this is a bad idea as processes will be started by root and so this will be inconsistent
 # config at /etc/lark.cfg will be consistent for all users
 # cfile = Path.home()/"lark.cfg"
@@ -35,8 +39,8 @@ if cfile.exists():
 #     config.update(cf)
 #     del cf
 
-for key, value in config.items():
-    globals()[key] = value
+# for key, value in config.items():
+#     globals()[key] = value
     
     
 darcmain_format = {

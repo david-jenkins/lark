@@ -3,14 +3,15 @@
 
 
 
-from abc import ABC
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
 from lark.display.widgets.misc import ModeItem, OptionsItem, OptionsWidget
-from lark.utils import UpperDict
 
 class HorizontalTabBar(QtW.QTabBar):
+    """A wrapper wround Qt QTabBar to allow easy horizontal tab bars
+    when the bar is on the left or right side
+    """
     def paintEvent(self, event):
         painter = QtW.QStylePainter(self)
         option = QtW.QStyleOptionTab()
@@ -21,23 +22,31 @@ class HorizontalTabBar(QtW.QTabBar):
                              QtC.Qt.AlignCenter | QtC.Qt.TextDontClip,
                              self.tabText(index))
 
-    def tabSizeHint(self, index):
+    def tabSizeHint(self, index:int) -> QtC.QSize:
         size = QtW.QTabBar.tabSizeHint(self, index)
         if size.width() < size.height():
             size.transpose()
         return size
 
 class TabWidget(QtW.QTabWidget):
-    def __init__(self, parent=None):
+    """A wrapper around QTabWidget to globally change the position of the tab bar
+    although currently it just puts it at the top to allow the pop out button to work
+    I haven't worked out how to use the pop out button with the HorizontalTabBar above...
+    """
+    def __init__(self, parent:QtW.QWidget = None) -> None:
         QtW.QTabWidget.__init__(self, parent)
         if parent is not None and not isinstance(parent,QtW.QMainWindow):
-            # self.setTabBar(HorizontalTabBar())
-            # self.setTabPosition(QtW.QTabWidget.West)
-            # self.setTabPosition(QtW.QTabWidget.South)
-            self.setTabPosition(QtW.QTabWidget.North)
+            self.setTabPosition(QtW.QTabWidget.North) # currently the tab bar is put at the top
+            # self.setTabBar(HorizontalTabBar()) # use the horizontal tab names when on the side
+            # self.setTabPosition(QtW.QTabWidget.West) # put tab bar on the left
+            # self.setTabPosition(QtW.QTabWidget.South) # put the tab bar on the bottom
 
 class SubTabWidget(TabWidget):
-    def __init__(self,parent=None):
+    """A wrapper around TabWidget(QTabWidget) to allow popping tabs out to windows.
+    And to let them pop back in
+
+    """
+    def __init__(self, parent:QtW.QWidget = None) -> None:
         super().__init__(parent=parent)
         self.widgets = {}
         self.popout = QtW.QPushButton("Pop Out")
@@ -47,39 +56,76 @@ class SubTabWidget(TabWidget):
         self.menu = QtW.QMenu("Menu",self)
         self.poppedout = {}
 
-    def addWidget(self, widget, name):
+    def addWidget(self, widget:QtW.QWidget, name:str) -> None:
+        """Add a new widget to the tab page
+
+        Args:
+            widget (QtW.QWidget): he widget to add
+            name (str): the widget name
+        """
         self.widgets[name] = widget
         self.addTab(widget, name)
         if widget.menu is not None:
             self.menu.addMenu(widget.menu)
 
-    def insertWidget(self, index, widget, name):
+    def insertWidget(self, index:int, widget:QtW.QWidget, name:str) -> None:
+        """Insert a widget at the specified index
+
+        Args:
+            index (int): _description_
+            widget (QtW.QWidget): _description_
+            name (str): _description_
+        """
         self.widgets[name] = widget
         self.insertTab(index, widget, name)
         if widget.menu is not None:
             self.menu.addMenu(widget.menu)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event:QtG.QCloseEvent) -> None:
+        """Make sure all widgets and popouts close as well
+
+        Args:
+            event (QtG.QCloseEvent): _description_
+        """
         for name,widget in self.widgets.items():
             widget.close()
         for name in list(self.poppedout):
             self.poppedout[name].close()
         return super().closeEvent(event)
 
-    def addMenus(self,menu):
+    def addMenus(self, menu:QtW.QMenu):
+        """Add all the menus from child widgets to the supplied menu
+
+        Args:
+            menu (_type_): _description_
+        """
         for name,widget in self.widgets.items():
+            widget:QtW.QWidget
             if widget.menu is not None:
                 menu.addMenu(widget.menu)
 
     def on_connect(self):
+        """Propagate on_connect to child widgets
+        """
         for name,widget in self.widgets.items():
-            widget.on_connect()
+            try:
+                widget.on_connect()
+            except AttributeError as e:
+                print(e)
 
     def on_disconnect(self):
+        """Propagate on_disconnect to child widgets
+        """
         for name,widget in self.widgets.items():
-            widget.on_disconnect()
-            
+            try:
+                widget.on_disconnect()
+            except AttributeError as e:
+                print(e)
+
     def popout_tab(self):
+        """Called when the pop-out button is pressed and pops out the current
+        tab into its own window
+        """
         widget = self.currentWidget()
         index = self.currentIndex()
         if index != -1:
@@ -92,14 +138,37 @@ class SubTabWidget(TabWidget):
             self.poppedout[txt] = dtab
             dtab.show()
 
-    def popin_tab(self, widget, name, index):
+    def popin_tab(self, widget:QtW.QWidget, name:str, index:int) -> None:
+        """Pop a widget back into the tab window, called when the popped out tab closes itself"""
         widget.setParent(self)
         del self.poppedout[name]
         self.insertTab(index,widget,name)
 
+class LarkTab(QtW.QWidget):
+    """The default class to inherit when making a GUI tab.
+    This ensures it has the right attributes.
+    """
+    def __init__(self, parent:QtW.QWidget = None) -> None:
+        super().__init__(parent=parent)
+        self.menu = None
+
+    def on_connect(self) -> None:
+        pass
+
+    def on_disconnect(self) -> None:
+        pass
+
 class DetachedTab(QtW.QMainWindow):
+    """A wrapper class for detached widget tabs to act as windows
+    """
     popinSig = QtC.pyqtSignal(object, str, int)
-    def __init__(self,widget,name,index):
+    def __init__(self, widget:QtW.QWidget, name:str, index:int) -> None:
+        """
+        Args:
+            widget (QtW.QWidget): The tab widget to detach
+            name (str): THe name of the widget to use as window title
+            index (int): The widget index in a tab list for reinsertion later
+        """
         super().__init__(parent=None)
         self.setWindowTitle(name)
         self.setCentralWidget(widget)
@@ -107,12 +176,19 @@ class DetachedTab(QtW.QMainWindow):
         self.widget = widget
         self.name = name
         self.index = index
-        
+
     def closeEvent(self, event) -> None:
         self.popinSig.emit(self.widget, self.name, self.index)
         super().closeEvent(event)
 
 class MainTabWidget(SubTabWidget):
+    """The main widget to inherit when creating a tabbed page.
+    It can be used to store child displays and will propagate some
+    functions to them when called on this class
+
+    Args:
+        SubTabWidget (_type_): _description_
+    """
     def __init__(self,parent=None):
         super().__init__(parent=parent)
         self.subdisplays = []
@@ -139,7 +215,14 @@ class MainTabWidget(SubTabWidget):
         self.subdisplays.remove(display)
 
 class MainWindow(QtW.QMainWindow):
-    def __init__(self, parent=None):
+    def __init__(self, parent:QtW.QWidget = None):
+        """A wrapper around QMainWindow, takes the cental widget as an argument
+        Propagates function calls to the central widget
+        The Main Widget class for creating a GUI window.
+
+        Args:
+            parent (QWidget, optional): The parent widget. Defaults to None.
+        """
         super().__init__(parent=parent)
         menu = self.menuBar()
         self.filemenu = QtW.QMenu("&File")
@@ -149,29 +232,29 @@ class MainWindow(QtW.QMainWindow):
         menu.addMenu(self.filemenu)
 
     def closeEvent(self, event):
-        self.main.close()
+        self.centralWidget().close()
         return super().closeEvent(event)
 
     def on_connect(self):
-        self.main.on_connect()
+        self.centralWidget().on_connect()
 
     def on_disconnect(self):
-        self.main.on_disconnect()
+        self.centralWidget().on_disconnect()
 
-class ObservingBlockOpener_base(QtW.QWidget):
-    def __init__(self,parent=None):
+class ObservingBlockOpener_GUIbase(QtW.QWidget):
+    """Base class for the observing block opener widget
+    GUIbase classes are used to define the GUI layout instead of in a ui file"""
+    def __init__(self, parent:QtW.QWidget = None) -> None:
         super().__init__(parent=parent)
-        """Open an observing block"""
-
         self.mode_list = QtW.QListWidget()
         # self.mode_list.setStyleSheet("QListWidget::item { background-color: red; border-bottom: 1px solid black; }")
         self.mode_list.setStyleSheet("QListWidget::item { background-color: lightgray;\
-    border-style: outset;\
-    border-width: 2px;\
-    border-radius: 10px;\
-    border-color: beige;\
-    font: bold 14px;\
-    min-width: 10em;  }" "QListWidget::item:selected { \
+            border-style: outset;\
+            border-width: 2px;\
+            border-radius: 10px;\
+            border-color: beige;\
+            font: bold 14px;\
+            min-width: 10em;  }" "QListWidget::item:selected { \
             background-color: rgba(0, 0, 224, 50); \
             border-style: inset; }")
         self.modestart_button = QtW.QPushButton("Start")

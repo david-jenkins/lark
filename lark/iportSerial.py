@@ -417,40 +417,40 @@ def coolCamera(temp, prefix="", cam=0):
 #     gtk.main()
 
 def main():
-    prefix=""
-    cam=0
+    prefix = ""
+    cam = 0
     if len(sys.argv)>1:
-        cmdlist=list(sys.argv[1:])
-        newlist=[]
+        cmdlist = list(sys.argv[1:])
+        newlist = []
         for cmd in cmdlist:
             if cmd.startswith("--prefix="):
                 #cmdlist.remove(cmd)
-                prefix=cmd[9:]
+                prefix = cmd[9:]
             elif cmd.startswith("--cam="):
                 #cmdlist.remove(cmd)
-                cam=int(cmd[6:])
+                cam = int(cmd[6:])
             else:
                 newlist.append(cmd)
-        cmdlist=newlist
+        cmdlist = newlist
         if cmdlist[0]=="setup":
             if len(cmdlist)!=5:
-                print("Usage: %s setup LaserFreq ShutterOpenTime(us) ShutterDelay(us - 666 to avoid readout) CameraFrameRate"%sys.argv[0])
+                print(f"Usage: {sys.argv[0]} setup LaserFreq ShutterOpenTime(us) ShutterDelay(us - 666 to avoid readout) CameraFrameRate")
             else:
-                laserfreq=float(cmdlist[1])
-                shuttertime=float(cmdlist[2])
-                delay=float(cmdlist[3])
-                framerate=float(cmdlist[4])
-                prepareShutter(laserfreq,shuttertime,delay,framerate,prefix=prefix,cam=cam)
+                laserfreq = float(cmdlist[1])
+                shuttertime = float(cmdlist[2])
+                delay = float(cmdlist[3])
+                framerate = float(cmdlist[4])
+                prepareShutter(laserfreq, shuttertime, delay, framerate, prefix=prefix, cam=cam)
         elif cmdlist[0]=="cool":
             if len(cmdlist)!=2:
-                print("Usage: %s cool TEMP"%sys.argv[0])
+                print(f"Usage: {sys.argv[0]} cool TEMP")
             else:
-                temp=float(cmdlist[1])
+                temp = float(cmdlist[1])
                 coolCamera(temp,prefix=prefix,cam=cam)
         # elif cmdlist[0]=="gui":
         #     runGUI()
         else:
-            cmd=" ".join(cmdlist)
+            cmd = " ".join(cmdlist)
             sendCmd(cmd, prefix, cam)
     else:
         print(txt)

@@ -9,7 +9,7 @@ def main():
     from lark.control import Control
     parser = argparse.ArgumentParser(description='Some helpful lark commands')
     parser.add_argument("cmd",metavar='cmd',type=str,nargs='+')
-    parser.add_argument("--prefix",dest='prefix',type=str)
+    parser.add_argument("--prefix",default="",dest='prefix',type=str)
     parser.add_argument("-s",dest='stdev',action='store_true')
     parser.add_argument("--string",dest='string',type=str)
     parser.add_argument("--name",dest="name",type=str)
@@ -55,8 +55,7 @@ def main():
         print(value)
 
     elif args.cmd[0] == "print":
-        names = c.getLabels()
-        value = c.getMany(names)
+        values = c.getAll()
         for key,val in value.items():
             print(f"{key} = {val}")
             

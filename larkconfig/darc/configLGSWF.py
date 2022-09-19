@@ -258,8 +258,8 @@ cameraParams[10*ncam+1]=namelen#number of bytes for the name.
 cameraParams[10*ncam+2:10*ncam+2+(namelen+3)//4].view("c")[:]=camNames
 cameraParams[10*ncam+2+(namelen+3)//4]=0#record timestamp
 
-# rmx=numpy.random.random((nacts,ncents)).astype("f")
-rmx = numpy.arange(nacts*ncents).astype("f")
+rmx = numpy.random.random((nacts,ncents)).astype("f")
+# rmx = numpy.arange(nacts*ncents).astype("f")
 rmx.shape = nacts,ncents
 refCents = None#FITS.Read("/root/canapy-rtc/data/3Jul_calibSys_canapy_pokeValue040_interact_matrix_97_actuators_refcents.fits")[1]
 
@@ -563,6 +563,7 @@ if 1:
 
 
 if __name__ == "__main__":
+    from lark import NoLarkError
     # xoff = [0]
     # xoff = xoff
     # yoff = [0]
@@ -573,7 +574,12 @@ if __name__ == "__main__":
     # 
     print(nsubx,nthreads,npxlx,npxly,ncam,pyramidMode,xoff,yoff,xsep,ysep)
     old_ps = gen_subapParams(nsubx,nthreads,npxlx,npxly,ncam,pyramidMode,xoff,yoff,xsep,ysep)
-    l = lark.LarkConfig("LgsWF").getlark()
+    try:
+        lrk = lark.LarkConfig("LgsWF").getlark()
+    except NoLarkError as e:
+        print(e)
+    else:
+        l = lrk
     
     param_names = list(old_ps.keys())
     param_names.append("rmx")

@@ -12,6 +12,7 @@ import pickle
 import sys
 import time
 import numpy
+from lark.utils import var_from_file
 import numa
 import argparse
 from collections import ChainMap
@@ -21,7 +22,7 @@ from .parambuf import ParamBuf, BufferError
 from .circbuf import CircReader, TelemetrySystem
 from . import check
 # from .configLoader import remote_fns
-from .configLoader import DATA_DIR
+from .configLoader import get_lark_config
 import lark
 
 def process_args():
@@ -85,8 +86,9 @@ def processConfigFile(prefix,fname):
     d = {"control":{}, "prefix":prefix, "numpy":numpy}
     #execfile(configFile,globals())
     #global control#gives syntax warning, but is required to work!
-    exec(compile(open(fname, "rb").read(), fname, 'exec'),d)
-    control=d["control"]
+    control = var_from_file("control", file_path=fname, prefix=prefix)
+    # exec(compile(open(fname, "rb").read(), fname, 'exec'),d)
+    # control=d["control"]
     if "comments" in d:
         comments=d["comments"]
     if "configfile" not in control:
@@ -227,19 +229,19 @@ class Control(ParamBuf, TelemetrySystem):
 
     # def getDataDir(self,subdir=None):
     #     if subdir is None:
-    #         tmp = Path(DATA_DIR)
+    #         tmp = Path(get_lark_config().DATA_DIR)
     #         if not tmp.exists():
     #             tmp.mkdir(parents=True)
     #         return [str(tmp)]+[p.name for p in tmp.iterdir() if not p.name.startswith(".")]
     #     else:
-    #         tmp = Path(DATA_DIR)/subdir
+    #         tmp = Path(get_lark_config().DATA_DIR)/subdir
     #         if tmp.is_dir():
     #             return [p.name for p in tmp.iterdir() if not p.name.startswith(".")]
     #         else:
     #             return str(tmp)
 
     def getDataDir(self, subdir=""):
-        tmp = Path(DATA_DIR)/subdir
+        tmp = Path(get_lark_config().DATA_DIR)/subdir
         if subdir == "":
             if not tmp.exists():
                 tmp.mkdir(parents=True)

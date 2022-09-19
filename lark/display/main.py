@@ -1,29 +1,34 @@
 
-import atexit
+
 import sys
-import PyQt5
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 
 from lark import LarkConfig, NoLarkError
 
-from .control import ControlPlot, ControlGui
+from .control import ControlGui
 from .telemetry import TelemetryMain
 from .dm import DmMain
 from .wfs import WfsMain
 import pyqtgraph as pg
 pg.setConfigOption('exitCleanup', False)
 
-from .widgets.main_base import MainTabWidget, MainWindow as _MainWindow, ObservingBlockOpener_base
+from .widgets.main_base import MainTabWidget, MainWindow
 
-class DisplayWidget(MainTabWidget):
-    def __init__(self, larkconfig:LarkConfig, parent=None, **kwargs):
+class MainDisplay(MainTabWidget):
+    """A widget for displaying Lark GUI widgets but without Lark controls.
+    Can be opened from a MainWidget as a secondary viewer
+    """
+    def __init__(self, larkconfig:LarkConfig, parent=None, daemon_controls=True, **kwargs):
         super().__init__(parent=parent)
         self.larkconfig = larkconfig
 
-        self.control = ControlPlot(self.larkconfig,self)
+        self.control = ControlGui(self.larkconfig, self, daemon_controls=daemon_controls)
         self.control.widgets["Control"].larkConnected.connect(self.on_connect)
         self.control.widgets["Control"].larkDisconnected.connect(self.on_disconnect)
+        if daemon_controls:
+            self.control.widgets["Daemon"].larkConnected.connect(self.on_connect)
+            self.control.widgets["Daemon"].larkDisconnected.connect(self.on_disconnect)
         telemetry = TelemetryMain(self.larkconfig,self)
         wfs = WfsMain(self.larkconfig,self)
         dm = DmMain(self.larkconfig,self)
@@ -34,38 +39,20 @@ class DisplayWidget(MainTabWidget):
         self.addWidget(dm, "DM")
         self.control.on_first_start()
 
-class MainWidget(MainTabWidget):
-    def __init__(self, larkconfig:LarkConfig, parent=None, **kwargs):
+class MainLarkWindow(MainWindow):
+    def __init__(self, larkconfig: LarkConfig, display_class=MainDisplay, parent=None, daemon_controls=True, **kwargs):
+        
         super().__init__(parent=parent)
-        self.larkconfig = larkconfig
-
-        control = ControlGui(self.larkconfig,self)
-        control.widgets["Control"].larkConnected.connect(self.on_connect)
-        control.widgets["Control"].larkDisconnected.connect(self.on_disconnect)
-        telemetry = TelemetryMain(self.larkconfig,self)
-        wfs = WfsMain(self.larkconfig,self)
-        dm = DmMain(self.larkconfig,self)
-
-        self.addWidget(control, "DARC")
-        self.addWidget(telemetry, "Telemetry")
-        self.addWidget(wfs, "WFS")
-        self.addWidget(dm, "DM")
-        control.on_first_start()
-
-class MainWindow(_MainWindow):
-    def __init__(self, larkconfig: LarkConfig, main_class=MainWidget, display_class=DisplayWidget, parent=None, **kwargs):
-        super().__init__(parent=parent)
+        main = display_class(larkconfig, parent=self, daemon_controls=daemon_controls, **kwargs)
+        self.setCentralWidget(main)
 
         self.larkconfig = larkconfig
-        self.main_class = main_class
-        self.display_class = display_class
         self.kwargs = kwargs
-
+        self.display_class = display_class
+        
         menu = self.menuBar()
-        self.main = main_class(self.larkconfig,parent=self,**kwargs)
-        self.main.addMenus(menu)
+        main.addMenus(menu)
         self.setMenuBar(menu)
-        self.setCentralWidget(self.main)
 
         self.openDisplayAction = QtW.QAction('Open Display')
         self.openDisplayAction.triggered.connect(self.openDisplay)
@@ -76,22 +63,22 @@ class MainWindow(_MainWindow):
         self.displays = []
 
     def closeEvent(self, event):
-        self.main.close()
+        self.centralWidget().close()
         return super().closeEvent(event)
 
     def openDisplay(self):
-        display = MainWindow(self.larkconfig, main_class=self.display_class, parent=self.main, **self.kwargs)
+        display = MainLarkWindow(self.larkconfig, main_class=self.display_class, parent=self.centralWidget(), daemon_controls=False, **self.kwargs)
         display.setWindowTitle("Lark Display")
         display.on_connect()
         display.installEventFilter(self)
         self.displays.append(display)
-        self.main.add_display(display)
+        self.centralWidget().add_display(display)
         display.resize(self.size())
         display.show()
 
     def eventFilter(self, obj, event):
         if obj in self.displays and event.type() == QtC.QEvent.Close:
-            self.main.remove_display(obj)
+            self.centralWidget().remove_display(obj)
             self.displays.remove(obj)
         return super().eventFilter(obj,event)
 
@@ -108,9 +95,7 @@ def larkplot():
     win = LarkPlot(prefix)
     if win is None:
         sys.exit()
-    # pyqtgraph does some cleanup that is MAYBE not necessary anymore
-    # it raises an exception on exit when using RPyC, this disables the
-    # cleanup routine
+    win.show()
     sys.exit(app.exec())
 
 def LarkPlot(prefix=None):
@@ -118,33 +103,31 @@ def LarkPlot(prefix=None):
     try:
         larkconfig.getlark()
     except NoLarkError as e:
-        print("No lark available with this prefix")
-        return None
-    win = MainWindow(larkconfig,DisplayWidget,DisplayWidget)
+        print(e)
+    win = MainLarkWindow(larkconfig, MainDisplay, daemon_controls=False)
     win.setWindowTitle("Lark Plot")
-    win.show()
     return win
 
 def LarkGUI(prefix=None):
     larkconfig = LarkConfig(prefix=prefix)
-    win = MainWindow(larkconfig)
+    win = MainLarkWindow(larkconfig)
     win.setWindowTitle("Lark GUI")
-    win.show()
     return win
     
-def widget_tester(widget,args,kwargs):
+def widget_tester(widget, args, kwargs):
     app = QtW.QApplication(sys.argv)
     win = QtW.QMainWindow()
     widget = widget(*args,**kwargs)
     win.setCentralWidget(widget)
     win.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 def main():
     app = QtW.QApplication(sys.argv)
     win = LarkGUI()
-    ret = app.exec()
-    sys.exit(ret)
+    # win = LarkPlot()
+    win.show()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()

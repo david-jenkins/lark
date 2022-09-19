@@ -6,7 +6,7 @@ from PyQt5 import QtGui as QtG
 
 import pyqtgraph as pg
 
-from lark import LarkConfig
+from lark import LarkConfig, NoLarkError
 from .widgets.main_base import SubTabWidget
 from .widgets.plotting import Plotter
 import numpy
@@ -288,8 +288,9 @@ class WfsImages(Plotter):
             else:
                 self.plot(self.data)
         QtC.QCoreApplication.processEvents()
+
 class WfsMain(SubTabWidget):
-    def __init__(self,larkconfig,parent=None):
+    def __init__(self,larkconfig,parent=None,**kwargs):
         super().__init__(parent=parent)
         self.larkconfig = larkconfig
         self.menu.setTitle("WFS")
@@ -317,12 +318,12 @@ def main():
         sys.exit()
     try:
         larkconfig.getlark()
-    except Exception as e:
+    except NoLarkError as e:
         print(e)
         sys.exit()
-    from .main import MainWindow
+    from .main import MainLarkWindow
     app = QtW.QApplication(sys.argv)
-    win = MainWindow(larkconfig,WfsMain,WfsMain)
+    win = MainLarkWindow(larkconfig, WfsMain)
     win.setWindowTitle("WFS")
     win.on_connect()
     win.show()

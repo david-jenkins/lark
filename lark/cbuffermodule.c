@@ -830,8 +830,8 @@ makeBufValFromPy(PyObject *value)
         // printf("dtype = %c\n",PyArray_DTYPE(aval)->kind);
         // printf("dtype = %c\n",PyArray_DTYPE(aval)->type);
         bval->ndim = PyArray_NDIM(aval);
-        for (i=0;i<aval->nd;i++) {
-            bval->dim[i] = PyArray_DIMS(aval)[i];
+        for (i=0;i<bval->ndim;i++) {
+            bval->dim[i] = PyArray_SHAPE(aval)[i];
         }
         bval->size = PyArray_NBYTES(aval);
         bval->data = malloc(bval->size);

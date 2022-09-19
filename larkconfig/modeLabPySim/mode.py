@@ -14,7 +14,7 @@ from pathlib import Path
 file_name = Path(__file__).parent.stem.replace("mode","")
 file_path = Path(__file__).parent.parent.resolve()
 
-host = "LASERLAB"
+host = "localhost"
 
 # prefix: (config_file, hostname)
 darcs = {

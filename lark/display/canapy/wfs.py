@@ -7,7 +7,8 @@ import time
 import datetime
 import inspect
 
-from lark import LarkConfig
+from lark import LarkConfig, NoLarkError
+from lark.configLoader import get_lark_config
 import lark
 from lark.darcconfig import gen_subapParams
 from lark.display.widgets.toolbar import CircleItem, LineItem, PlotToolbar
@@ -122,29 +123,33 @@ class CalibrationWindowBoth(QtW.QWidget):
 
     def takedarks_callback(self):
         try:
+            lrk = self.pyrconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
             ocamfps = self.ocamfpsbox.value()
             evtfps = self.evtfpsbox.value()
             ocamgain = self.ocamgainbox.value()
             evtgain = self.evtgainbox.value()
-
-            self.parent.setfpsspin.setValue(ocamfps)
-            self.parent.setfpsspin2.setValue(evtfps)
-            self.parent.setgainspin.setValue(ocamgain)
-            self.parent.setgainspin2.setValue(evtgain)
-
-            self.parent.setocamfps_callback()
-            self.parent.setevtfps_callback()
-            self.parent.setocamgain_callback()
-            self.parent.setevtgain_callback()
-
-            this_darc = self.pyrconfig.getlark()
-
             N = self.saveimsspin.value()
+            
+            try:
+                self.parent.setfpsspin.setValue(ocamfps)
+                self.parent.setfpsspin2.setValue(evtfps)
+                self.parent.setgainspin.setValue(ocamgain)
+                self.parent.setgainspin2.setValue(evtgain)
 
-            ims = this_darc.getStreamBlock("rtcPxlBuf",N)["rtcPxlBuf"][0].mean(0)
+                self.parent.setocamfps_callback()
+                self.parent.setevtfps_callback()
+                self.parent.setocamgain_callback()
+                self.parent.setevtgain_callback()
+            except Exception as e:
+                pass
 
-            npxlx = this_darc.Get("npxlx")
-            npxly = this_darc.Get("npxly")
+            ims = lrk.getStreamBlock("rtcPxlBuf",N)["rtcPxlBuf"][0].mean(0)
+
+            npxlx = lrk.Get("npxlx")
+            npxly = lrk.Get("npxly")
 
             self.ocam_dark = ims[:npxlx[0]*npxly[0]]
             self.evt_dark = ims[npxlx[0]*npxly[0]:]
@@ -165,36 +170,39 @@ class CalibrationWindowBoth(QtW.QWidget):
             self.opends9_callback(fname=self.curr_name+"_ocam.fits")
             self.opends9_callback(fname=self.curr_name+"_evt.fits")
             self.fnamelabel.setText(self.curr_name)
-        except Exception as e:
-            print(e)
 
     def opends9_callback(self,event=False,fname=None):
         self.parent.opends9_callback(fname=fname)
 
     def apply_callback(self):
         try:
-            fname = self.curr_name
-            if fname == "":
-                return None
-            this_darc = self.pyrconfig.getlark()
-            npxlx = this_darc.Get("npxlx")
-            npxly = this_darc.Get("npxly")
-            if self.ocam_dark is None:
-                if os.path.exists(fname+"_ocam.fits"):
-                    self.ocam_dark = fits.getdata(fname+"_ocam.fits").flatten()
-                else:
-                    self.ocam_dark = numpy.zeros(npxlx[0]*npxly[0])
-            if self.evt_dark is None:
-                if os.path.exists(fname+"_evt.fits"):
-                    self.evt_dark = fits.getdata(fname+"_evt.fits").flatten()
-                else:
-                    self.evt_dark = numpy.zeros(npxlx[0]*npxly[0])
-            dark = numpy.empty(npxlx[0]*npxly[0]+npxlx[1]*npxly[1],dtype=float)
-            dark[:npxly[0]*npxlx[0]] = self.ocam_dark.astype(float)
-            dark[npxly[0]*npxlx[0]:] = self.evt_dark.astype(float)
-            this_darc.set("bgImage",dark)
-        except Exception as e:
+            lrk = self.pyrconfig.getlark()
+        except NoLarkError as e:
             print(e)
+        else:
+            try:
+                fname = self.curr_name
+                if fname == "":
+                    return None
+
+                npxlx = lrk.Get("npxlx")
+                npxly = lrk.Get("npxly")
+                if self.ocam_dark is None:
+                    if os.path.exists(fname+"_ocam.fits"):
+                        self.ocam_dark = fits.getdata(fname+"_ocam.fits").flatten()
+                    else:
+                        self.ocam_dark = numpy.zeros(npxlx[0]*npxly[0])
+                if self.evt_dark is None:
+                    if os.path.exists(fname+"_evt.fits"):
+                        self.evt_dark = fits.getdata(fname+"_evt.fits").flatten()
+                    else:
+                        self.evt_dark = numpy.zeros(npxlx[0]*npxly[0])
+                dark = numpy.empty(npxlx[0]*npxly[0]+npxlx[1]*npxly[1],dtype=float)
+                dark[:npxly[0]*npxlx[0]] = self.ocam_dark.astype(float)
+                dark[npxly[0]*npxlx[0]:] = self.evt_dark.astype(float)
+                lrk.set("bgImage",dark)
+            except Exception as e:
+                print(e)
 
     def load_image_callback(self):
         fname = QtW.QFileDialog.getOpenFileName(self, 'Open file', str(self.dir_path),"FITS files (*.fits)",options=QtW.QFileDialog.DontUseNativeDialog)[0]
@@ -372,7 +380,7 @@ class CamControl(CamControl_base):
 
         self.menu = QtW.QMenu("OCAM",self)
         
-        self.dir_path = Path(lark.configLoader.DATA_DIR)
+        self.dir_path = Path(get_lark_config().DATA_DIR)
         
         self.ds9processes = []
 
@@ -427,71 +435,87 @@ class CamControl(CamControl_base):
         logging.info(f"Set OCAM FPS to {fps}")
 
     def setevtfps_callback(self):
-        this_darc = self.scoringconfig.getlark()
-        fps = self.setfpsspin2.value()
-        this_darc.set("aravisCmd0",f"FrameRate={fps};")
-        # cmd = '-string="FrameRate={};"'.format(fps)
-        # print(cmd)
-        # darcmagic --prefix=canapy set -name=aravisCmd1 -string="FrameRate=100;"
-        # setprocess = QtC.QProcess()
-        # setprocess.start("darcmagic --prefix=canapy set aravisCmd1 -string=\"\"\"FrameRate={};\"\"\"".format(fps))
-        # setprocess.waitForFinished()
-        # subprocess.Popen(["darcmagic","--prefix=canapy","set","-name=aravisCmd1",cmd])
-        logging.info(f"Set EVT FPS to {fps}")
+        try:
+            lrk = self.scoringconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            fps = self.setfpsspin2.value()
+            lrk.set("aravisCmd0",f"FrameRate={fps};")
+            # cmd = '-string="FrameRate={};"'.format(fps)
+            # print(cmd)
+            # darcmagic --prefix=canapy set -name=aravisCmd1 -string="FrameRate=100;"
+            # setprocess = QtC.QProcess()
+            # setprocess.start("darcmagic --prefix=canapy set aravisCmd1 -string=\"\"\"FrameRate={};\"\"\"".format(fps))
+            # setprocess.waitForFinished()
+            # subprocess.Popen(["darcmagic","--prefix=canapy","set","-name=aravisCmd1",cmd])
+            logging.info(f"Set EVT FPS to {fps}")
 
     def setocamgain_callback(self):
         gain = self.setgainspin.value()
         self.iportsrtc.iPortSerial.run(command=f"gain {gain}")
 
     def setevtgain_callback(self):
-        this_darc = self.scoringconfig.getlark()
-        gain = self.setgainspin2.value()
-        this_darc.set("aravisCmd0",f"Gain={gain};")
+        try:
+            lrk = self.scoringconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            gain = self.setgainspin2.value()
+            lrk.set("aravisCmd0",f"Gain={gain};")
         # subprocess.Popen(["darcmagic","--prefix=canapy","set","-name=aravisCmd1","-string=\"Gain={};\"".format(gain)])
 
     def setevtexp_callback(self):
-        this_darc = self.scoringconfig.getlark()
+        try:
+            lrk = self.scoringconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         exp = self.setexpspin.value()
-        this_darc.set("aravisCmd0",f"Exposure={exp};")
+        lrk.set("aravisCmd0",f"Exposure={exp};")
         # subprocess.Popen(["darcmagic","--prefix=canapy","set","-name=aravisCmd1","-string=\"Expsoure={};\"".format(exp)])
 
     def saveims_callback(self):
         logging.info(f"Called: {inspect.stack()[1].function}")
-        pyr_darc = self.pyrconfig.getlark()
-        pyr_npxlx = pyr_darc.get("npxlx")[0]
-        pyr_npxly = pyr_darc.get("npxly")[0]
-        sco_darc = self.scoringconfig.getlark()
-        sco_npxlx = sco_darc.get("npxlx")[0]
-        sco_npxly = sco_darc.get("npxly")[0]
-        nim = self.saveimsspin.value()
-        fname = str(self.saveimstext.text())
-        if fname == "":
-            fname = "darc_ims"
-        now = datetime.datetime.now()
-        fname += "-{:0>2}{:0>2}{:0>2}".format(now.hour,now.minute,now.second)
-        from lark.parallel import threadSynchroniser
-        ims = threadSynchroniser([pyr_darc.getStreamBlock,sco_darc.getStreamBlock],args=[("rtcPxlBuf",nim),("rtcPxlBuf",nim)])
-        # ims = this_darc.GetStreamBlock("rtcPxlBuf",nim)["rtcPxlBuf"][0]
-        ocam = ims[0][0]
-        evt = ims[1][0]
-        print(ocam.shape, evt.shape)
-        ocam.shape = ocam.shape[0],pyr_npxly,pyr_npxlx
-        evt.shape = evt.shape[0],sco_npxly,sco_npxlx
+        try:
+            pyr_darc = self.pyrconfig.getlark()
+            sco_darc = self.scoringconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            pyr_npxlx = pyr_darc.get("npxlx")[0]
+            pyr_npxly = pyr_darc.get("npxly")[0]
+            sco_npxlx = sco_darc.get("npxlx")[0]
+            sco_npxly = sco_darc.get("npxly")[0]
+            nim = self.saveimsspin.value()
+            fname = str(self.saveimstext.text())
+            if fname == "":
+                fname = "darc_ims"
+            now = datetime.datetime.now()
+            fname += "-{:0>2}{:0>2}{:0>2}".format(now.hour,now.minute,now.second)
+            from lark.parallel import threadSynchroniser
+        
+            ims = threadSynchroniser([pyr_darc.getStreamBlock,sco_darc.getStreamBlock],args=[("rtcPxlBuf",nim),("rtcPxlBuf",nim)])
+            # ims = this_darc.GetStreamBlock("rtcPxlBuf",nim)["rtcPxlBuf"][0]
+            ocam = ims[0][0]
+            evt = ims[1][0]
+            print(ocam.shape, evt.shape)
+            ocam.shape = ocam.shape[0],pyr_npxly,pyr_npxlx
+            evt.shape = evt.shape[0],sco_npxly,sco_npxlx
 
-        print(self.dir_path)
-        fname1 = str(self.dir_path/(fname + "_ocam.fits"))
-        FITS.Write(ocam,fname1)
-        fname2 = str(self.dir_path/(fname + "_evt.fits"))
-        FITS.Write(evt,fname2)
+            print(self.dir_path)
+            fname1 = str(self.dir_path/(fname + "_ocam.fits"))
+            FITS.Write(ocam,fname1)
+            fname2 = str(self.dir_path/(fname + "_evt.fits"))
+            FITS.Write(evt,fname2)
 
-        self.opends9_callback(fname=fname1)
-        self.opends9_callback(fname=fname2)
+            self.opends9_callback(fname=fname1)
+            self.opends9_callback(fname=fname2)
 
-        # print(ims.shape)
-        # print(npxlx,npxly,npxlx*npxly)
-        # from matplotlib import pyplot
-        # pyplot.imshow(ims[0],cmap='gray')
-        # pyplot.show()
+            # print(ims.shape)
+            # print(npxlx,npxly,npxlx*npxly)
+            # from matplotlib import pyplot
+            # pyplot.imshow(ims[0],cmap='gray')
+            # pyplot.show()
 
     def opends9_callback(self,event=False,fname=None):
         logging.info(f"Called: opends9_callback(self,event={event},fname={fname})")
@@ -553,7 +577,10 @@ class PupilControl(QtW.QWidget):
         self.setWindowFlags(QtC.Qt.Window)
         
     def on_connect(self):
-        self.lark = self.larkconfig.getlark()
+        try:
+            self.lark = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         
     def get_callback(self):
         circs = self.parent().circs[0]

@@ -8,6 +8,8 @@ from .widgets.plotting import Plotter
 
 from .widgets.main_base import SubTabWidget
 
+from lark import NoLarkError
+
 class DmCommands1D(Plotter):
     def __init__(self,larkconfig,parent=None):
         super().__init__(larkconfig,parent=parent,plottype="1D",streams=["rtcMirrorBuf"])
@@ -65,7 +67,7 @@ class DmCommands2D(Plotter):
         super().on_disconnect()
 
 class DmMain(SubTabWidget):
-    def __init__(self,larkconfig,parent=None):
+    def __init__(self,larkconfig,parent=None,**kwargs):
         super().__init__(parent=parent)
         self.menu.setTitle("DM")
         self.larkconfig = larkconfig
@@ -85,12 +87,12 @@ def main():
         sys.exit()
     try:
         larkconfig.getlark()
-    except Exception as e:
+    except NoLarkError as e:
         print(e)
         sys.exit()
     app = QtW.QApplication(sys.argv)
-    from .main import MainWindow
-    win = MainWindow(larkconfig, DmMain, DmMain)
+    from .main import MainLarkWindow
+    win = MainLarkWindow(larkconfig, DmMain)
     win.on_connect()
     win.show()
     sys.exit(app.exec_())

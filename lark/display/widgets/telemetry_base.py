@@ -1,12 +1,11 @@
 
 
-from pathlib import Path
-import PyQt5
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from pyqtgraph.parametertree import Parameter, ParameterTree
 
 import lark
+from lark import NoLarkError
 from .remote_files import RemoteFilePicker
 
 class StreamWidget(ParameterTree):
@@ -153,49 +152,84 @@ class StreamWidget(ParameterTree):
             streamitem.param("saver").sigValueChanged.connect(self.saver_callback)
 
     def reader_callback(self, event):
-        stream = event.parent().name()
-        value = event.value()
-        if value:
-            self.larkconfig.getlark().startStream(stream)
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         else:
-            self.larkconfig.getlark().stopStream(stream)
+            stream = event.parent().name()
+            value = event.value()
+            if value:
+                lrk.startStream(stream)
+            else:
+                lrk.stopStream(stream)
 
     def decimation_callback(self, event):
         stream = event.parent().parent().name()
         value = event.value()
-        self.larkconfig.getlark().setDecimation(stream,value)
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            lrk.setDecimation(stream,value)
 
     def publisher_callback(self, event):
-        stream = event.parent().name()
-        value = event.value()
-        if value:
-            self.larkconfig.getlark().startStreamPublish(stream)
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
         else:
-            self.larkconfig.getlark().stopStreamPublish(stream)
+            stream = event.parent().name()
+            value = event.value()
+            if value:
+                lrk.startStreamPublish(stream)
+            else:
+                lrk.stopStreamPublish(stream)
 
     def host_callback(self, event):
-        stream = event.parent().parent().name()
-        value = event.value()
-        self.larkconfig.getlark().setStreamHost(stream, value)
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            stream = event.parent().parent().name()
+            value = event.value()
+            lrk.setStreamHost(stream, value)
 
     def port_callback(self, event):
-        stream = event.parent().parent().name()
-        value = event.value()
-        self.larkconfig.getlark().setStreamPort(stream, value)
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            stream = event.parent().parent().name()
+            value = event.value()
+            lrk.setStreamPort(stream, value)
 
     def multicast_callback(self, event):
-        stream = event.parent().parent().name()
-        value = event.value()
-        self.larkconfig.getlark().setStreamMulticast(stream, value)
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            stream = event.parent().parent().name()
+            value = event.value()
+            lrk.setStreamMulticast(stream, value)
 
     def saver_callback(self, event):
-        stream = event.parent().name()
-        value = event.value()
-        name  = event.param("Filename").value()
-        frames  = event.param("frames per file").value()
-        print(stream,value,name,frames)
-        if value:
-            self.larkconfig.getlark().saveFrames(stream,frames,name)
+        try:
+            lrk = self.larkconfig.getlark()
+        except NoLarkError as e:
+            print(e)
+        else:
+            stream = event.parent().name()
+            value = event.value()
+            name  = event.param("Filename").value()
+            frames  = event.param("frames per file").value()
+            print(stream,value,name,frames)
+            if value:
+                lrk.saveFrames(stream,frames,name)
 
     def filename_callback(self, event):
         stream = event.parent().parent().name()

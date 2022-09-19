@@ -1,11 +1,7 @@
-import sys
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
 from lark.display.widgets.misc import ParameterTreeQt, ServiceChooser, ServiceFinder
-
-from pyqtgraph.parametertree import ParameterTree
-
 
 class SrtcFunctionList_base(QtW.QWidget):
     def __init__(self,parent=None):

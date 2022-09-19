@@ -26,8 +26,7 @@ def connectDaemon(hostname:str = None):
         _type_: _description_
     """
     if hostname is None:
-        registry = get_registry_parameters()
-        hostname = registry["hostname"]
+        hostname = get_registry_parameters().RPYC_HOSTNAME
     logger.info(f"Connecting to host: {hostname}")
     return connectClient(hostname+"_Daemon")
 

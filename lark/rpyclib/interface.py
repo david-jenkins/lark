@@ -41,6 +41,7 @@ the paramters are loaded from the file at /etc/rpyc.cfg which is installed from 
 to use this mode do not set any environment variables and do not use command line parameters.
 """
 
+from dataclasses import dataclass
 from logging import getLogger
 import sys
 import os
@@ -76,21 +77,15 @@ logger.propagate = False
 log_to_file("rpyc",logger=logger)
 # log_to_stdout(logger,level="DEBUG")
 
-DEFAULT_IP = "255.255.255.255"
-DEFAULT_PORT = "18511"
-DEFAULT_MODE = "UDP"
-DEFAULT_HOST = "localhost"
-DEFAULT_PASSWD = "lEt Me IN PlEAse"
+@dataclass
+class RPYCConfig:
+    RPYC_IP: str = "255.255.255.255"
+    RPYC_PORT: str = "18511"
+    RPYC_MODE: str = "UDP"
+    RPYC_HOSTNAME: str = "localhost"
+    RPYC_PASSWD: str = "lEt Me IN PlEAse"
 
 RPYC_PORT = 18561
-
-DEFAULT_PARAMS = {
-    "RPYC_IP":DEFAULT_IP,
-    "RPYC_PORT":DEFAULT_PORT,
-    "RPYC_MODE":DEFAULT_MODE,
-    "RPYC_HOSTNAME":DEFAULT_HOST,
-    "RPYC_PASSWD":DEFAULT_PASSWD
-    }
 
 #params can be found in /etc/rpyc.cfg and above dict in that order
 
@@ -232,7 +227,7 @@ class BgServer:
             self._thread.join()
             self._thread = None
 
-def get_registry_parameters():
+def get_registry_parameters(reload:bool = False) -> RPYCConfig:
     """Get the RPyC registry parameters, first uses the config file at /etc/lark.cfg and
     then uses defaults defined above.
 
@@ -240,7 +235,7 @@ def get_registry_parameters():
         str,int,str: returns the IP adress, port and mode
     """
     
-    if get_registry_parameters.PARAMS is None:
+    if get_registry_parameters.PARAMS is None or reload:
         cfg_filepath = "/etc/lark.cfg"
 
         if os.path.exists(cfg_filepath):
@@ -267,17 +262,18 @@ def get_registry_parameters():
         # precendence when finding values, it then searches along each until
         # it finds a value or raises a KeyError if nothing is found
         # these_args = ChainMap(env_args,cfg_args,DEFAULT_PARAMS)
-        cfg_args.update({k:v for k,v in DEFAULT_PARAMS.items() if k not in cfg_args})
+        # cfg_args.update({k:v for k,v in DEFAULT_PARAMS.items() if k not in cfg_args})
         # for k in DEFAULT_PARAMS.keys():
         #     print(k,these_args[k])
 
-        registry = {
-            "ip":cfg_args["RPYC_IP"],
-            "port":cfg_args["RPYC_PORT"],
-            "mode":cfg_args["RPYC_MODE"],
-            "hostname":cfg_args["RPYC_HOSTNAME"],
-            "passwd":cfg_args["RPYC_PASSWD"],
-            }
+        # registry = {
+        #     "ip":cfg_args["RPYC_IP"],
+        #     "port":cfg_args["RPYC_PORT"],
+        #     "mode":cfg_args["RPYC_MODE"],
+        #     "hostname":cfg_args["RPYC_HOSTNAME"],
+        #     "passwd":cfg_args["RPYC_PASSWD"],
+        #     }
+        registry = RPYCConfig(**cfg_args)
         
         get_registry_parameters.PARAMS = registry
 
@@ -311,9 +307,9 @@ def find_registry(registry_ip, registry_port, registry_mode):
 
 def get_registry():
     regparams = get_registry_parameters()
-    registry_ip = regparams["ip"]
-    registry_port = int(regparams["port"])
-    registry_mode = regparams["mode"]
+    registry_ip = regparams.RPYC_IP
+    registry_port = int(regparams.RPYC_PORT)
+    registry_mode = regparams.RPYC_MODE
     return find_registry(registry_ip,registry_port,registry_mode)
     
 
@@ -333,12 +329,12 @@ def get_registrar() -> Union[UDPRegistryClient,TCPRegistryClient]:
 
         registry = get_registry_parameters()
 
-        registry_port = int(registry["port"])
+        registry_port = int(registry.RPYC_PORT)
 
-        if registry["mode"] == "UDP":
-            registrar = UDPRegistryClient(ip=registry["ip"], port=registry_port)
-        elif registry["mode"] == "TCP":
-            registrar = TCPRegistryClient(ip=registry["ip"], port=registry_port)
+        if registry.RPYC_MODE == "UDP":
+            registrar = UDPRegistryClient(ip=registry.RPYC_IP, port=registry_port)
+        elif registry.RPYC_MODE == "TCP":
+            registrar = TCPRegistryClient(ip=registry.RPYC_IP, port=registry_port)
         registrar.REREGISTER_INTERVAL = 15
         get_registrar.REGISTRAR = registrar
     return get_registrar.REGISTRAR
@@ -376,7 +372,7 @@ def host_authenticator(sock):
     return sock, None
 
 def password_authenticator(sock):
-    passwd = get_registry_parameters()["passwd"]
+    passwd = get_registry_parameters().RPYC_PASSWD
     if sock.recv(len(passwd)) != passwd.encode():
         raise AuthenticationError(f"Wrong password {passwd}")
     return sock, None
@@ -502,9 +498,9 @@ def larkNameServer():
     # this_ip, this_port, this_mode =
     registry = get_registry_parameters()
 
-    default_ip_port = f"{registry['ip']}:{registry['port']}"
+    default_ip_port = f"{registry.RPYC_IP}:{registry.RPYC_PORT}"
     parser.add_argument("ip_port",default=default_ip_port,nargs='?',type=str,help="format = ip:port")
-    parser.add_argument("-mode",dest="mode",default=registry['mode'],type=str, help="UDP or TCP")
+    parser.add_argument("-mode",dest="mode",default=registry.RPYC_MODE,type=str, help="UDP or TCP")
     parser.add_argument("-o",dest="output",action="store_true",help="Use to print output to command line, else prints to /var/log/lark/larkNames.log")
 
     args = parser.parse_args()
@@ -521,10 +517,10 @@ def larkNameServer():
         port = int(args.ip_port.split(':')[1])
     except ValueError as e:
         print("error with port, using default port")
-        port = registry['port']
+        port = registry.RPYC_PORT
     except IndexError as e:
         print("error with port, using default port")
-        port = registry['port']
+        port = registry.RPYC_PORT
 
     if args.mode != "UDP" and args.mode != "TCP":
         print("mode is not valid")

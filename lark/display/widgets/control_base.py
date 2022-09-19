@@ -1,17 +1,14 @@
 
-from itertools import count
-from pathlib import PosixPath
-import PyQt5
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
-from pyqtgraph.parametertree import Parameter, ParameterTree, ParameterItem, registerParameterType
-from pyqtgraph import DataTreeWidget
+
+from lark.display.widgets.main_base import LarkTab
 
 from .misc import DaemonDarcList, HostChooser, ParameterTreeQt, ParamSetterQt, PrefixChooser, ServiceFinder
 
-class Daemon_base(QtW.QWidget):
-    def __init__(self, parent=None):
-        QtW.QWidget.__init__(self, parent=parent)
+class Daemon_base(LarkTab):
+    def __init__(self, parent:QtW.QWidget = None):
+        super().__init__(parent=parent)
 
         # define menu
         self.menu = QtW.QMenu("&Daemon")
@@ -30,7 +27,7 @@ class Daemon_base(QtW.QWidget):
         self.startdarc_button = QtW.QPushButton("Start Darc")
         self.stopdarc_button = QtW.QPushButton("Stop Darc")
         self.status_button = QtW.QPushButton("Get Status")
-        self.selectconfig_button = QtW.QPushButton("Open Other File")
+        self.selectconfig_button = QtW.QPushButton("Choose Folder")
         self.viewparams_button = QtW.QPushButton("Inspect Parameters")
         self.refreshparams_button = QtW.QPushButton("Refresh Parameters")
         self.saveparams_button = QtW.QPushButton("Save ParamBuf")
@@ -114,11 +111,9 @@ class Daemon_base(QtW.QWidget):
         # config dropdown
         # startup options, like darccontrol options, parametertree?
 
-class DarcControl_base(QtW.QWidget):
-    def __init__(self,parent=None):
-        QtW.QWidget.__init__(self,parent=parent)
-        self.menu = None
-
+class DarcControl_base(LarkTab):
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
 
         self.prefix_chooser = ServiceFinder("Darc on NameServer","CONTROL",self)
         self.prefix_setter = PrefixChooser(self)
@@ -162,9 +157,9 @@ class DarcControl_base(QtW.QWidget):
 
         self.setLayout(self.vlay)
 
-class AOControl_base(QtW.QWidget):
-    def __init__(self,parent=None):
-        QtW.QWidget.__init__(self,parent=parent)
+class AOControl_base(LarkTab):
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
 
         # define menu
         self.menu = QtW.QMenu("&Control")

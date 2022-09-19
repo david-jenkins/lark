@@ -31,7 +31,7 @@ MAX_FILE_SIZE = 100000000
 
 CNT = 0
 
-from lark.configLoader import DATA_DIR
+from lark.configLoader import get_lark_config
 
 def make_cfits(fname, delem, dtype, frames=None, header=None, overwrite=0):
     """ Generate a large empty cfits file on disk.
@@ -158,7 +158,7 @@ class CircReader(cCircReader):
         self._thread = None
         self.thread_started = False
         self.thread_users = 0
-        self.dir = Path(DATA_DIR)
+        self.dir = Path(get_lark_config().DATA_DIR)
         self.logger = getLogger(f"{prefix}.{streamName}")
 
     def start(self, started=True):

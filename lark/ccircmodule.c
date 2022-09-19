@@ -434,7 +434,7 @@ CircStruct_sethost(CircStruct *self, PyObject *value, void *closure)
                         "The host attribute value must be a string");
         return -1;
     }
-    char *host = PyUnicode_AsUTF8(value);
+    const char *host = PyUnicode_AsUTF8(value);
     free(self->threadStruct->zmqStruct->host);
     self->threadStruct->zmqStruct->host = strdup(host);
     printf("set host to %s\n",self->threadStruct->zmqStruct->host);
@@ -453,7 +453,7 @@ CircStruct_setmulticast(CircStruct *self, PyObject *value, void *closure)
                         "The multicast attribute value must be a string");
         return -1;
     }
-    char *multicast = PyUnicode_AsUTF8(value);
+    const char *multicast = PyUnicode_AsUTF8(value);
     free(self->threadStruct->zmqStruct->multicast);
     self->threadStruct->zmqStruct->multicast = strdup(multicast);
     return 0;
@@ -728,13 +728,13 @@ CircStruct_prepare_data(CircStruct *self, PyObject *args){
     }
 
     array_desc = PyArray_DescrFromType(cheader[16]);
-    self->threadStruct->data_array = PyArray_Zeros(self->nd+1, ndim, array_desc, 0);
+    self->threadStruct->data_array = (PyArrayObject *)PyArray_Zeros(self->nd+1, ndim, array_desc, 0);
 
     array_desc = PyArray_DescrFromType(NPY_DOUBLE);
-    self->threadStruct->ftim_array = PyArray_Zeros(1, ndim, array_desc, 0);
+    self->threadStruct->ftim_array = (PyArrayObject *)PyArray_Zeros(1, ndim, array_desc, 0);
 
     array_desc = PyArray_DescrFromType(NPY_UINT32);
-    self->threadStruct->fnum_array = PyArray_Zeros(1, ndim, array_desc, 0);
+    self->threadStruct->fnum_array = (PyArrayObject *)PyArray_Zeros(1, ndim, array_desc, 0);
 
     self->threadStruct->data_index = 0;
 
@@ -762,7 +762,7 @@ CircStruct_get_data(CircStruct *self, PyObject *args){
     if (value) {
         pthread_barrier_wait(value->barrier);
     }
-    self->threadStruct->data_go = (int)self->threadStruct->data_array->dimensions[0];
+    self->threadStruct->data_go = (int)(PyArray_SHAPE(self->threadStruct->data_array)[0]);
     pthread_mutex_lock(self->threadStruct->data_mutex);
     while(self->threadStruct->data_go!=0) {
        pthread_cond_wait(self->threadStruct->data_cond,self->threadStruct->data_mutex);
@@ -1024,7 +1024,7 @@ CircSubscriber_setdecimation(CircSubscriber *self, PyObject *value, void *closur
     int power = 1;
     while (dec >>= 1) power <<= 1;
 
-    debug_print("Got power = %d = 2^%d\n",power, log2(power));
+    debug_print("Got power = %d = 2^%f\n",power, log2(power));
 
     int old_pow = (int)log2(self->threadStruct->decimation);
     int now_pow = (int)log2(power);
@@ -1128,18 +1128,18 @@ CircSubscriber_start_thread(CircSubscriber *self){
 
     char *cheader = (char*)self->threadStruct->dataHeader;
 
-    debug_print("Making array of size %d, shape %d, dtype %c\n",self->ndim[0],self->nd,cheader[16]);
+    debug_print("Making array of size %d, shape %d, dtype %c\n",(int)self->ndim[0],self->nd,cheader[16]);
     Py_XDECREF(self->threadStruct->cb_data);
     array_desc = PyArray_DescrFromType(cheader[16]);
-    self->threadStruct->cb_data = PyArray_Zeros(self->nd, self->ndim, array_desc, 0);
+    self->threadStruct->cb_data = (PyArrayObject *)PyArray_Zeros(self->nd, self->ndim, array_desc, 0);
 
     Py_XDECREF(self->threadStruct->cb_ftim);
     array_desc = PyArray_DescrFromType(NPY_DOUBLE);
-    self->threadStruct->cb_ftim = PyArray_Zeros(1, ndim, array_desc, 0);
+    self->threadStruct->cb_ftim = (PyArrayObject *)PyArray_Zeros(1, ndim, array_desc, 0);
 
     Py_XDECREF(self->threadStruct->cb_fnum);
     array_desc = PyArray_DescrFromType(NPY_UINT32);
-    self->threadStruct->cb_fnum = PyArray_Zeros(1, ndim, array_desc, 0);
+    self->threadStruct->cb_fnum = (PyArrayObject *)PyArray_Zeros(1, ndim, array_desc, 0);
     
     self->threadStruct->sizechanged = 0;
 
@@ -1340,7 +1340,7 @@ CircReader_setdecimation(CircReader *self, PyObject *value, void *closure)
 {
     if (self->threadStruct->thread_go!=1) {
         PyErr_SetString(PyExc_RuntimeError, "Thread not running");
-        return NULL;
+        return -1;
     }
 
     if (value == NULL) {
@@ -1410,7 +1410,7 @@ CircReader_start_thread(CircReader *self){
 
     if (get_next_frame(self->threadStruct)) {
         PyErr_SetString(PyExc_TypeError, "Can't get frame");
-        return -1;
+        return NULL;
     }
 
     get_info(self->threadStruct);
@@ -1422,13 +1422,13 @@ CircReader_start_thread(CircReader *self){
 
     char *cheader = (char*)self->threadStruct->dataHeader;
     array_desc = PyArray_DescrFromType(cheader[16]);
-    self->threadStruct->cb_data = PyArray_Zeros(self->nd, self->ndim, array_desc, 0);
+    self->threadStruct->cb_data = (PyArrayObject *)PyArray_Zeros(self->nd, self->ndim, array_desc, 0);
 
     array_desc = PyArray_DescrFromType(NPY_DOUBLE);
-    self->threadStruct->cb_ftim = PyArray_Zeros(1, ndim, array_desc, 0);
+    self->threadStruct->cb_ftim = (PyArrayObject *)PyArray_Zeros(1, ndim, array_desc, 0);
 
     array_desc = PyArray_DescrFromType(NPY_UINT32);
-    self->threadStruct->cb_fnum = PyArray_Zeros(1, ndim, array_desc, 0);
+    self->threadStruct->cb_fnum = (PyArrayObject *)PyArray_Zeros(1, ndim, array_desc, 0);
 
     if (self->threadRunning) {
         return PyLong_FromLong(1);
@@ -1642,7 +1642,6 @@ int
 check_stream_name(const char *value)
 {
     int i;
-    int rt = 1;
     for (i=0; i<NUMBER_OF_STREAMS; i++) {
         if (!strcmp(value,streamNameArr[i])) {
             return 0;
@@ -1879,7 +1878,7 @@ send_data(thread_struct *tstr)
     nsent = zmq_send (tstr->zmqStruct->publisher, tstr->dataHandle, size, 0);
     // nsent = zmq_send (tstr->zmqStruct->publisher, &tstr->dataHandle[32], size, 0);
 
-    return 0;
+    return nsent;
 }
 
 inline int
@@ -1945,7 +1944,8 @@ copy_data(thread_struct *tstr)
     int index = tstr->data_index;
     double *ftime_arr = (double *)PyArray_DATA(tstr->ftim_array);
     unsigned int *fnumb_arr = (unsigned int *)PyArray_DATA(tstr->fnum_array);
-    memcpy(&(PyArray_DATA(tstr->data_array)[index*size]),tstr->dataHandle,size);
+    void *data_loc = PyArray_DATA(tstr->data_array)+index*size;
+    memcpy(data_loc,tstr->dataHandle,size);
     ftime_arr[index] = ((double *)tstr->dataHeader)[1];
     fnumb_arr[index] = tstr->dataHeader[1];
     tstr->data_index++;
@@ -2026,7 +2026,7 @@ reshape_cb(CircReader *self){
     PyArray_Dims dims;
     dims.ptr = self->ndim;
     dims.len = self->nd;
-    self->threadStruct->cb_data = PyArray_Newshape(self->threadStruct->cb_data, &dims, NPY_CORDER);
+    self->threadStruct->cb_data = (PyArrayObject *)PyArray_Newshape(self->threadStruct->cb_data, &dims, NPY_CORDER);
     return 0;
 }
 

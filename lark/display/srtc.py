@@ -52,12 +52,15 @@ class SrtcFunctionList(SrtcFunctionList_base):
         lark.getservice(self.name).getPlugin(name).Configure(**self.param_tree.get_values())
 
     def get_params(self):
-        name = self.func_list.currentItem().text()
-        print(name)
-        function = lark.getservice(self.name).getPlugin(name)
-        print(function)
-        values = function.values
-        self.param_tree.setData(values)
+        self.param_tree.clear()
+        item = self.func_list.currentItem()
+        if item is not None:
+            name = item.text()
+            print(name)
+            function = lark.getservice(self.name).getPlugin(name)
+            print(function)
+            values = function.values
+            self.param_tree.setData(values)
 
     def on_connect(self):
         pass

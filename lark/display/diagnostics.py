@@ -3,7 +3,7 @@ from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
 
-from .misc import TabWidget
+from lark.display.widgets.main_base import TabWidget
 
 import pyqtgraph as pg
 pg.setConfigOption('exitCleanup', False)

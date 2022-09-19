@@ -1,8 +1,5 @@
 
-from errno import E2BIG
-from matplotlib.pyplot import draw
 import numpy
-import PyQt5
 import pyqtgraph as pg
 
 from PyQt5 import QtWidgets as QtW

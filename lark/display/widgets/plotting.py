@@ -8,11 +8,9 @@ from PyQt5 import QtGui as QtG
 from pyqtgraph import PlotItem, PlotDataItem, ViewBox, ImageItem, ImageView, GraphicsLayoutWidget, ColorBarItem
 import pyqtgraph as pg
 
-import lark
-import lark.display
+from lark import LarkConfig, NoLarkError
 from .toolbar import PlotToolbar
 from ...rpyclib.interface import BgServer
-from ...interface import ControlClient
 import numpy
 
 pg.setConfigOption('background', 'w')
@@ -329,7 +327,7 @@ PlotTypes = {
 }
 
 class Plotter(QtW.QWidget):
-    def __init__(self,larkconfig:lark.LarkConfig,parent=None,plottype="2D",streams=None):
+    def __init__(self,larkconfig:LarkConfig,parent=None,plottype="2D",streams=None):
         super().__init__(parent=parent)
         self.larkconfig = larkconfig
 
@@ -387,7 +385,10 @@ class Plotter(QtW.QWidget):
 
     def on_connect(self):
         self._data = None
-        self.lark = self.larkconfig.getlark(unique=True)
+        try:
+            self.lark = self.larkconfig.getlark(unique=True)
+        except NoLarkError as e:
+            print(e)
 
     def update_plot(self):
         pass
@@ -484,7 +485,7 @@ class Plotter(QtW.QWidget):
         
         
 class ScrollingPlot(Plotter):
-    def __init__(self, larkconfig: lark.LarkConfig, parent=None, streams=None):
+    def __init__(self, larkconfig: LarkConfig, parent=None, streams=None):
         self.chunkSize = 1000
         self.maxChunks = 100
         self.curves = []

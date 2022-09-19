@@ -8,7 +8,7 @@ import socket
 import time
 import numpy
 
-from lark import LarkConfig
+from lark import LarkConfig, NoLarkError
 from lark.services import BaseService, BasePlugin
 
 class iPortService(BaseService):
@@ -32,7 +32,11 @@ class iPortDaemon(BasePlugin):
         self.period = 1
         
     def Setup(self):
-        self.lark = LarkConfig(self["prefix"]).getlark()
+        try:
+            self.lark = LarkConfig(self["prefix"]).getlark()
+        except NoLarkError as e:
+            print(e)
+            self.lark = None
         
     def _thread_func(self, _apply, **kwargs):
         cnt = 0

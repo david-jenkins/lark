@@ -1,9 +1,6 @@
 
-import ast
 import copy
-from pathlib import Path, PosixPath, PurePath
-from typing import List, Tuple
-import PyQt5
+from pathlib import Path, PosixPath
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtGui as QtG
 from PyQt5 import QtCore as QtC
@@ -11,12 +8,12 @@ from lark.daemon import LarkDaemon
 from lark.display.widgets.plotting import PlotText
 from lark.display.widgets.remote_files import DaemonFilePicker
 from lark.interface import ControlClient, connectDaemon
-from lark.rpyclib.interface import get_registrar
+from lark.interface import get_registrar, get_registry_parameters
 from pyqtgraph.parametertree import Parameter, ParameterTree, parameterTypes as pTypes
 import numpy
 
-from lark import LarkConfig, configLoader
-from lark.utils import UpperDict, import_from, statusBuf_tostring
+from lark.configLoader import get_lark_config
+from lark.utils import statusBuf_tostring
 
 import importlib.resources
 
@@ -104,7 +101,7 @@ class DaemonDarcList(QtW.QPushButton):
         self.hostname = hostname
         super().__init__("Find DARC on Daemon", parent=parent)
         self.clicked.connect(self.callback)
-        
+
     def set_host(self, hostname):
         self.hostname = hostname
 
@@ -117,44 +114,126 @@ class DaemonDarcList(QtW.QPushButton):
         serv_list = ListSelector(services, "DARC", self)
         if serv_list.exec():
             self.serviceChosen.emit(serv_list.selectedOption)
-            
+
 class StrListGroup(pTypes.GroupParameter):
     def __init__(self, **opts):
         opts['type'] = 'group'
         opts['addText'] = "Add"
         super().__init__(**opts)
         self.sigChildRemoved.connect(self.emitChange)
-    
+
     def addNew(self, value=""):
-        print("addNew",value)
         name = "Item %d" % (len(self.childs)+1)
         self.addChild(dict(name=name, type="str", value=value, removable=True, renamable=False))
         self.param(name).sigValueChanged.connect(self.emitChange)
-        
+
     def emitChange(self, event):
         self.setValue([c.value() for c in self.childs])
         self.sigValueChanged.emit(self,self.value())
-        
+
 class DictGroup(pTypes.GroupParameter):
-    def __init__(self, **opts):
+    def __init__(self, init_dict={}, expandable=True, **opts):
         opts['type'] = 'group'
-        opts['addText'] = "Add"
+        if expandable:
+            opts.setdefault('addText', "Add")
+            opts.setdefault('addList', ['str','int','float'])
         super().__init__(**opts)
-        self.sigChildRemoved.connect(self.emitChange)
-    
-    def addNew(self, values:dict={"":""}):
-        print("addNew",values)
-        name = "Item %d" % (len(self.childs)+1)
-        for key,value in values.items():
-            self.addChild(dict(name=name, type="group"))
-            self.param(name).addChild(dict(name="key",value=key,type="str"))
-            self.param(name).param("key").sigValueChanged.connect(self.emitChange)
-            self.param(name).addChild(dict(name="value",value=value,type=type(value).__name__))
-            self.param(name).param("value").sigValueChanged.connect(self.emitChange)
-            # self.param(name).sigValueChanged.connect(self.emitChange)
+        self.addParams(init_dict)
+        self.sigChildRemoved.connect(self._childRemoved)
         
-    def emitChange(self, event):
-        self.setValue({c.param("key").value():c.param("value").value() for c in self.childs})
+    def addNew(self, typ):
+        val = {'str':'','int':0,'float':0.0}[typ]
+        param = {
+            'name': f"Param {(len(self.childs)+1)}",
+            'type': typ,
+            'value': val,
+            'removable': True,
+            'renamable': True
+        }
+        self.addChild(param)
+
+    def addParam(self, name, value):
+        # if isinstance(value,dict):
+        #     group = {
+        #         "name":key,
+        #         "type":"group",
+        #         "children":[]
+        #     }
+        #     addParams(value,group["children"])
+        #     plist.append(group)
+        if isinstance(value,dict):
+            param = DictGroup(value, name=name)
+        elif isinstance(value,list):
+            print("Adding list ",value)
+            # children = [{'name': f"ListItem {i}", "type":type(v).__name__, "value": v, "readonly":self.readonly} for i,v in enumerate(value)]
+            param = StrListGroup(
+                name=name,
+                tip='Click to add children, right click to remove',
+                )
+            for i in value:
+                param.addNew(i)
+        elif isinstance(value, numpy.ndarray):
+            param = {
+                "name":name,
+                "type":"str",
+                # "value":f"ndarray, shape={value.shape}, dtype={value.dtype}",
+                "value":repr(value)+f", shape={value.shape}",
+                "readonly":True,
+                "dontset":True
+            }
+        elif isinstance(value, numpy.number):
+            param = {
+                "name":name,
+                "type":"str",
+                "value":f"ndvalue={value}, dtype={value.dtype}",
+                "readonly":True,
+                "dontset":True
+            }
+        elif isinstance(value,PosixPath):
+            param = {
+                "name":name,
+                "type":"str",
+                "value":str(value),
+                "dontset":True
+            }
+        elif value is None:
+            param = {
+                "name":name,
+                "type":"str",
+                "value":"NONE",
+                "readonly":True,
+                "dontset":True
+            }
+        else:
+            param = {
+                "name":name,
+                "type":type(value).__name__,
+                "value":value,
+                "readonly":self.readonly()
+            }
+        self.addChild(param)
+        
+    def addChild(self, child, autoIncrementName=None):
+        if isinstance(child, dict):
+            name = child["name"]
+            child.setdefault("dontset",False)
+        else:
+            name = child.name()
+            child.opts.setdefault("dontset",False)
+        retval = super().addChild(child, autoIncrementName)
+        self.param(name).sigStateChanged.connect(self.emitChange)
+        return retval
+
+    def addParams(self, pdict:dict):
+        for key, value in pdict.items():
+            self.addParam(key, value)
+            
+    def _childRemoved(self, child):
+        # child.sigStateChanged.disconnect(self.emitChange)
+        self.emitChange(child)
+
+    def emitChange(self, event, info=None):
+        self.setValue({c.name():c.value() for c in self.childs})
         self.sigValueChanged.emit(self,self.value())
 
 class ParameterTreeQt(QtW.QWidget):
@@ -180,76 +259,13 @@ class ParameterTreeQt(QtW.QWidget):
         self.input_dict = {copy.copy(key):copy.copy(value) for key,value in params.items()}
         self.parameters = []
         self.dontset = []
-        def addParams(pdict,plist):
-            for key,value in pdict.items():
-                # if isinstance(value,dict):
-                #     group = {
-                #         "name":key,
-                #         "type":"group",
-                #         "children":[]
-                #     }
-                #     addParams(value,group["children"])
-                #     plist.append(group)
-                if isinstance(value,dict):
-                    group = DictGroup(name=key)
-                    group.addNew(value)
-                    plist.append(group)
-                elif isinstance(value,list):
-                    print("Adding list ",value)
-                    # children = [{'name': f"ListItem {i}", "type":type(v).__name__, "value": v, "readonly":self.readonly} for i,v in enumerate(value)]
-                    p = StrListGroup(
-                        name=key,
-                        tip='Click to add children, right click to remove',
-                        )
-                    for i in value:
-                        p.addNew(i)
-                    plist.append(p)
-                elif isinstance(value, numpy.ndarray):
-                    self.dontset.append(key)
-                    plist.append({
-                        "name":key,
-                        "type":"str",
-                        # "value":f"ndarray, shape={value.shape}, dtype={value.dtype}",
-                        "value":repr(value)+f", shape={value.shape}",
-                        "readonly":True
-                    })
-                elif isinstance(value, numpy.number):
-                    self.dontset.append(key)
-                    plist.append({
-                        "name":key,
-                        "type":"str",
-                        "value":f"ndvalue={value}, dtype={value.dtype}",
-                        "readonly":True
-                    })
-                elif isinstance(value,PosixPath):
-                    self.dontset.append(key)
-                    plist.append({
-                        "name":key,
-                        "type":"str",
-                        "value":str(value),
-                    })
-                elif value is None:
-                    self.dontset.append(key)
-                    plist.append({
-                        "name":key,
-                        "type":"str",
-                        "value":"NONE",
-                        "readonly":True
-                    })
-                else:
-                    plist.append({
-                        "name":key,
-                        "type":type(value).__name__,
-                        "value":value,
-                        "readonly":self.readonly
-                    })
-        addParams(dict(sorted(params.items())),self.parameters)
         # self.parameters.append({
         #     "name":"Use These Values",
         #     "type":"action",
         #     "tip":"Store current params into dictionary",
         # })
-        self.paramgroup = Parameter.create(name=self.name, type='group', children=self.parameters)
+        # self.paramgroup = Parameter.create(name=self.name, type='group', children=self.parameters)
+        self.paramgroup = DictGroup(dict(sorted(params.items())), name=self.name, expandable=False)
         # self.paramgroup.param("Use These Values").sigActivated.connect(self.usevalues_callback)
         def connectparams(pdict,pgroup):
             for key,value in pdict.items():
@@ -284,7 +300,8 @@ class ParameterTreeQt(QtW.QWidget):
                 if isinstance(value,dict):
                     grab_values(value,pgroup.param(key))
                 else:
-                    if key not in self.dontset:
+                    # if key not in self.dontset:
+                    if not pgroup.param(key).opts["dontset"]:
                         pdict[key] = pgroup.param(key).value()
         grab_values(self.input_dict,self.paramgroup)
 
@@ -415,7 +432,7 @@ class DarcSelector(QtW.QDialog):
         self.setLayout(self.layout)
 
 class ListSelector(QtW.QDialog):
-    def __init__(self, options: List, name="Option", parent=None):
+    def __init__(self, options: list, name="Option", parent=None):
         super().__init__(parent)
 
         self.setWindowTitle(f"Select {name}")
@@ -457,7 +474,7 @@ class DarcOpener(QtW.QWidget):
         self.setWindowTitle("Choose Darc")
 
         self.daemon_label = QtW.QLabel("Daemon:")
-        self.daemon_input = QtW.QLineEdit(configLoader.DEFAULT_HOST)
+        self.daemon_input = QtW.QLineEdit(get_registry_parameters().RPYC_HOSTNAME)
         self.daemon_button = QtW.QPushButton("Accept")
         self.daemon_choice = QtW.QLabel("Using Daemon:")
 
@@ -616,10 +633,10 @@ class OptionsWidget(QtW.QWidget):
 
         self.modedir_label = QtW.QPushButton("Choose Directory")
         self.modedir_input = QtW.QLineEdit()
-        
+
         self.resetdaemon_button = QtW.QPushButton("Full Reset")
         self.resetdaemon_input = QtW.QLineEdit()
-        
+
         self.resetdaemon_button.clicked.connect(self.resetdaemon_callback)
 
         self.modedir_input.returnPressed.connect(self.modedir_callback)
@@ -637,19 +654,19 @@ class OptionsWidget(QtW.QWidget):
     def modedir_callback(self):
         self.mode_dir = self.modedir_input.text()
         self.modeDirChanged.emit(self.mode_dir)
-        
+
     def modedir_clicked(self):
         dir = QtW.QFileDialog.getExistingDirectory(None, "Choose Directory",str(Path.home()))
         if dir:
             self.mode_dir = dir
             self.modeDirChanged.emit(self.mode_dir)
-        
+
     def resetdaemon_callback(self, event):
         self.resetDaemonClicked.emit(self.resetdaemon_input.text())
 
     def setModeDir(self, mode_dir):
         self.modedir_input.setText(str(mode_dir))
-        
+
     def setDaemonHost(self, hostname):
         self.resetdaemon_input.setText(hostname)
 
@@ -671,14 +688,14 @@ class LocalFileFollower(PlotText):
         self.stripchars = stripchars
         self.set_file_name(file_name)
         self.timeout_msec = 50
-        
+
     def open_file(self):
         return self.fpath.open()
-        
+
     def set_file_name(self, file_name):
         self.fpath = Path(file_name) if file_name is not None else None
         self.on_connect()
-        
+
     def on_connect(self):
         print(f"self.fpath = {self.fpath}")
         self._stop_follow()
@@ -708,10 +725,10 @@ class LocalFileFollower(PlotText):
             txt+=_txt[self.stripchars:]
         if txt:
             self.gotLine.emit(txt)
-        
+
     def update_plot(self,msg):
         self.plot(msg,clear=0)
-        
+
     def _start_follow(self):
         if self.fpath is None:
             return
@@ -727,42 +744,42 @@ class LocalFileFollower(PlotText):
         print("SHWOING")
         self._start_follow()
         return super().showEvent(event)
-    
+
     def _stop_follow(self):
         self.timer.stop()
         if self.file is not None:
             self.tell = self.file.tell()
             self.file.close()
             self.file = None
-    
+
     def hideEvent(self, event) -> None:
         print("HIDIING")
         self._stop_follow()
         return super().hideEvent(event)
-        
-        
+
+
 class RemoteFileFollower(LocalFileFollower):
     def __init__(self, file_name, host="localhost", stripchars=0, parent=None):
         super().__init__(file_name,stripchars,parent)
         self.set_host(host)
         self.timeout_msec = 500
-        
+
     def set_file_location(self, file_name, host=None):
         self.set_host(host)
         self.set_file_name(file_name)
-        
+
     def set_host(self,host):
         self.host = host if host is not None else self.host
-        
+
     def open_file(self):
         return connectDaemon(self.host).openFile(self.fpath)
-        
+
 class LoggerFilePrint(LocalFileFollower):
     def __init__(self, file_name, parent=None):
         fpath = Path("/var/log/lark")/f"{file_name}"
         stripchars = len(fpath.stem)+8
         super().__init__(file_name=fpath,stripchars=stripchars,parent=parent)
-        
+
 class FileDropDown(QtW.QWidget):
     fileSelected = QtC.pyqtSignal(str)
     def __init__(self, directory, host=None, filter=None, parent=None):
@@ -773,16 +790,16 @@ class FileDropDown(QtW.QWidget):
         self.dropdown = QtW.QComboBox()
         self.folder_button = QtW.QPushButton("Folder")
         self.folder_button.clicked.connect(self.folder_callback)
-        
+
         self.dropdown.currentIndexChanged.connect(self.file_callback)
         self.refresh()
-            
+
         self.hbox = QtW.QHBoxLayout()
         self.hbox.addWidget(self.dropdown)
         self.hbox.addWidget(self.folder_button)
-            
+
         self.setLayout(self.hbox)
-        
+
     def set_directory(self, directory):
         self.dir = Path(directory)
         self.refresh()
@@ -799,7 +816,7 @@ class FileDropDown(QtW.QWidget):
                 continue
             self.dropdown.addItem(file)
         self.dropdown.setCurrentIndex(0)
-        
+
     def folder_callback(self):
         if self.host is None:
             # filen = QtW.QFileDialog.getOpenFileName(self, 'Open Folder', "/",options=QtW.QFileDialog.DontUseNativeDialog)[0]
@@ -811,31 +828,31 @@ class FileDropDown(QtW.QWidget):
                 if Path(wdg.fname).is_dir():
                     self.set_directory(wdg.fname)
         pass
-    
+
     def file_callback(self, index):
         print(index)
         print(self.dropdown.currentText())
         self.fileSelected.emit(str(self.dir/self.dropdown.currentText()))
-    
+
 class LogFileTailer(QtW.QWidget):
     def __init__(self, host="localhost", dir="/var/log/lark", filter=None, parent=None):
         super().__init__(parent=parent)
         self.host = host
         self.menu = None
-        
+
         self.filelist = FileDropDown(dir, host, filter=filter)
-        
+
         self.vbox = QtW.QVBoxLayout()
         self.vbox.addWidget(self.filelist)
-        
+
         self.logbox = RemoteFileFollower(None,self.host)
         self.vbox.addWidget(self.logbox)
-        
+
         self.setLayout(self.vbox)
-        
+
         self.filelist.fileSelected.connect(self.filelist_callback)
         self.filelist.file_callback(None)
-        
+
     def filelist_callback(self,filename):
         print("FNAME:",filename)
         fpath = Path(filename)

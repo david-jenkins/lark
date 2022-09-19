@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import Dict, List, Tuple
-from lark import LarkConfig, NoLarkError
+import sys
+from lark import LarkConfig, NoLarkError, get_lark_config
 from lark.display.main import LarkPlot
-from lark.display.widgets.main_base import ObservingBlockOpener_base
+from lark.display.widgets.main_base import ObservingBlockOpener_GUIbase
 from lark.interface import connectDaemon
 from lark.rpyclib.interface import connectClient, get_registrar, get_registry_parameters
 from lark.utils import UpperDict, import_from
@@ -11,7 +11,7 @@ from PyQt5 import QtCore as QtC
 from PyQt5 import QtWidgets as QtW
 
 
-class ObservingBlockOpener(ObservingBlockOpener_base):
+class ObservingBlockOpener(ObservingBlockOpener_GUIbase):
     def __init__(self,parent=None):
         super().__init__(parent=parent)
         """Open an observing block"""
@@ -29,7 +29,7 @@ class ObservingBlockOpener(ObservingBlockOpener_base):
 
         self.options_widget.hide()
         self.options_widget.modeDirChanged.connect(self.setModeDir)
-        hostname = get_registry_parameters()["hostname"]
+        hostname = get_registry_parameters().RPYC_HOSTNAME
         self.options_widget.setDaemonHost(hostname)
         self.options_widget.resetDaemonClicked.connect(self.reset_daemon)
 
@@ -118,7 +118,7 @@ Description: {nlspsp}{md.info}"""
 
     def interrogate_nameserver(self):
         reg = get_registrar()
-        serv_list: Tuple[str] = reg.list()
+        serv_list: tuple[str] = reg.list()
         self.darcs = []
         for sn in serv_list:
             try:
@@ -219,6 +219,7 @@ Description: {nlspsp}{md.info}"""
             print(e)
         else:
             if disp:
+                disp.show()
                 self.displays[prefix] = disp
                 self.setupModes()
 
@@ -228,13 +229,13 @@ Description: {nlspsp}{md.info}"""
         ans = self.messagebox.question(self,'', "Are you sure you want to stop DARC?", self.messagebox.Yes | self.messagebox.No)
         if ans == self.messagebox.Yes:
             try:
-                larkconfig.getlark()
-            except NoLarkError:
-                print("No lark available")
+                lrk = larkconfig.getlark()
+            except NoLarkError as e:
+                print(e)
             else:
                 err = ""
                 try:
-                    larkconfig.getlark().stop()
+                    lrk.stop()
                 except EOFError as e:
                     err = e
                 larkconfig.closelark()
@@ -255,3 +256,19 @@ Description: {nlspsp}{md.info}"""
             else:
                 value.close()
         return super().closeEvent(event)
+
+
+def modeselector():
+    app = QtW.QApplication(sys.argv)
+    win = ObservingBlockOpener()
+    config_dir = Path(get_lark_config().CONFIG_DIR).expanduser()
+    # win.setModeDir("/home/laserlab/djenkins/git/canapy-rtc/canapyconfig")
+    win.setModeDir(config_dir)
+    # win.setModeDir("/home/canapyrtc/git/canapy-rtc/canapyconfig")
+    host = get_registry_parameters().RPYC_HOSTNAME
+    win.setDaemonHost(host)
+    win.show()
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    modeselector()

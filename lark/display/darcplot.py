@@ -126,7 +126,7 @@ class WatchStdIn(QtC.QThread):
     def __init__(self,input_callback=None,hup_callback=None):
         if input_callback is None and hup_callback is None:
             raise Exception("No callback provided")
-        super().__init__(self)
+        super().__init__()
         self.hup_callback = hup_callback
         if input_callback is not None:
             self.IOSignal.connect(input_callback)
@@ -158,7 +158,7 @@ class WatchStream(QtC.QThread):
     def __init__(self,stream=None,input_callback=None,hup_callback=None):
         if input_callback is None and hup_callback is None:
             raise Exception("No callback provided")
-        super().__init__(self)
+        super().__init__()
         self.hup_callback = hup_callback
         if input_callback is not None:
             self.IOSignal.connect(input_callback)

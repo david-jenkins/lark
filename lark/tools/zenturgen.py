@@ -2,41 +2,45 @@ import numpy
 import itertools
 import scipy.io
 import sys
-from canapyrtc import HOME
+from pathlib import Path
+
+HOME = str(Path.home())
 
 # independent module helper functions
 '''Get the variance for each zernike coefficient based on the remaining residual wavefront error'''
-def getDeltaJ(J,D,r_0):
-    deltaJcoeff = [1.0299,0.582,0.134,0.111,0.088,0.0648,0.0587,0.0525,0.0463,0.0401,0.0377,0.0352,0.0328,0.0304,0.0279,0.0267,0.0255,0.0243,0.0232,0.0220,0.0208]
+def getDeltaJ(J:int, D:float, r_0:float) -> float:
+    deltaJcoeff = [1.0299, 0.582, 0.134, 0.111, 0.088, 0.0648, 0.0587, 0.0525,
+                   0.0463, 0.0401, 0.0377, 0.0352, 0.0328, 0.0304, 0.0279,
+                   0.0267, 0.0255, 0.0243, 0.0232, 0.0220, 0.0208]
     if J<22:
         return deltaJcoeff[J-1]*numpy.power(D/r_0,5./3.)
     else:
         return 0.2944*numpy.power(J,-numpy.sqrt(3.)/2.)*numpy.power(D/r_0,5./3.)
 
-def getVarZcoef(J,D,r_0):
+def getVarZcoef(J:int, D:float, r_0:float) -> float:
     '''This uses the numbers from Noll to calculate the varinace for each zernike, J=1 is Piston'''
     if J==0:
-        print("Error, J can't be zero")
+        raise ValueError("Error, J can't be zero")
     elif J==1:
-        return getDeltaJ(J,D,r_0)
+        return getDeltaJ(J, D, r_0)
     else:
-        return getDeltaJ(J-1,D,r_0)-getDeltaJ(J,D,r_0)
+        return getDeltaJ(J-1, D, r_0)-getDeltaJ(J, D, r_0)
 
 '''define the Noll Zernike polynomials'''
     
-def getR(n,m,r):
+def getR(n:int, m:int, r:int) -> float:
     '''get the radial component as a function of n,m,r'''
-    R=0.
+    R = 0.
     for s in range((n-m)//2+1):
-        t=numpy.power(-1,s)*numpy.math.factorial(n-s)
-        b=numpy.math.factorial(s)*numpy.math.factorial((n+m)/2-s)*numpy.math.factorial((n-m)/2-s)
-        R+=(t/b)*numpy.power(r,n-(2*s))
+        t = numpy.power(-1,s)*numpy.math.factorial(n-s)
+        b = numpy.math.factorial(s)*numpy.math.factorial((n+m)//2-s)*numpy.math.factorial((n-m)//2-s)
+        R += (t/b)*numpy.power(r, n-(2*s))
     return R
 
 #class for generating and storing corresponding J, N, M values
 class JNM:
-    def __init__(self,Zn):
-        self._jnm = numpy.zeros((Zn+1,2),dtype=int)
+    def __init__(self, Zn):
+        self._jnm = numpy.zeros((Zn+1,2), dtype=int)
         n = 0
         jmax = 0
         while jmax<(Zn+1):
@@ -51,7 +55,7 @@ class JNM:
                     jmax+=1
             n+=1
 
-    def __getitem__(self,key):
+    def __getitem__(self, key):
         if type(key) is slice:
             if key.start<=0:
                 raise Exception("Cannot get index 0 with slice")
@@ -59,14 +63,14 @@ class JNM:
         elif type(key) is tuple:
             if key[0].start<=0:
                 raise Exception("Cannot get index 0 with slice")
-            key = (slice(key[0].start-1,key[0].stop-1,key[0].step),key[1])
+            key = (slice(key[0].start-1, key[0].stop-1, key[0].step),key[1])
         elif type(key) is int:
             if key<=0:
                 raise Exception("Cannot get index 0 with index")
             key -= 1
         return self._jnm[key]
 
-    def __setitem__(self,key,value):
+    def __setitem__(self, key, value):
         raise Exception("Cannot set")
 
     def __repr__(self):
@@ -76,7 +80,7 @@ class JNM:
         return str(self._jnm)
 
     def __iter__(self):
-        for i in range(self._Zn):
+        for i in range(len(self._jnm)):
             yield self._jnm[i]
 
 # class for producing zernike images
@@ -91,7 +95,7 @@ class ZernikeMaps:
         return self._Zn
 
     @Zn.setter
-    def Zn(self,value):
+    def Zn(self, value):
         if value <= 0:
             raise Exception("Gimme some zernikes!")
         self._Zn = int(value)
@@ -102,7 +106,7 @@ class ZernikeMaps:
         return self._size
 
     @size.setter
-    def size(self,value):
+    def size(self, value):
         if value<=0:
             raise Exception("Size can't be zero or less")
         self._size = int(value)
@@ -113,19 +117,19 @@ class ZernikeMaps:
         self.current_values = (self._Zn,self._size)
         pupsize = self._size
         self._phase = numpy.zeros((self._Zn,self._size,self._size),dtype=float)
-        x = (numpy.arange(pupsize,dtype=numpy.float)-(pupsize-1)/2.)/((pupsize)/2.)
-        thetas=numpy.arctan2(-x[:,numpy.newaxis],x[numpy.newaxis,:,])
-        rs=numpy.sqrt(x[:,numpy.newaxis]**2 + x[numpy.newaxis,:,]**2)
+        x = (numpy.arange(pupsize, dtype=float)-(pupsize-1)/2.)/((pupsize)/2.)
+        thetas = numpy.arctan2(-x[:,numpy.newaxis],x[numpy.newaxis,:,])
+        rs = numpy.sqrt(x[:,numpy.newaxis]**2 + x[numpy.newaxis,:,]**2)
         for j in range(self._Zn):
             J=j+1
-            n,M = self._jnm[J]
-            m = numpy.abs(M)
+            n, M = self._jnm[J]
+            m = numpy.absolute(M)
             if m==0:
-                self._phase[j] = numpy.sqrt(n+1)*getR(n,m,rs)
+                self._phase[j] = numpy.sqrt(n+1)*getR(n, m, rs)
             elif (J%2)==0:
-                self._phase[j] = numpy.sqrt(n+1)*getR(n,m,rs)*numpy.sqrt(2.)*numpy.cos(m*thetas)
+                self._phase[j] = numpy.sqrt(n+1)*getR(n, m, rs)*numpy.sqrt(2.)*numpy.cos(m*thetas)
             elif (J%2)!=0:
-                self._phase[j] = numpy.sqrt(n+1)*getR(n,m,rs)*numpy.sqrt(2.)*numpy.sin(m*thetas)
+                self._phase[j] = numpy.sqrt(n+1)*getR(n, m, rs)*numpy.sqrt(2.)*numpy.sin(m*thetas)
             self._phase[j][numpy.where(rs>1.)] = 0.
     
     def regen(self):
@@ -164,11 +168,11 @@ class ZernikeMaps:
             phase+=zcoeffs[i]*self._phase[i+1]
         return phase
 
-    def Z2DM(self,Z2C):
+    def Z2DM(self, Z2C):
         nacts = Z2C.shape[1]
-        Zn = min(self._Zn,Z2C.shape[0])
-        DMcube = numpy.zeros((Zn,nacts))
-        dmZsign = numpy.ones(Zn,dtype=int)
+        Zn = min(self._Zn, Z2C.shape[0])
+        DMcube = numpy.zeros((Zn, nacts))
+        dmZsign = numpy.ones(Zn, dtype=int)
         dmZsign[numpy.where(self._jnm[2:Zn+2,0]%2==0)]=-1
         unity = numpy.diag(numpy.ones(Zn))
         for i in range(Zn):
@@ -319,7 +323,7 @@ class AtmosphereGenerator():
                 '''tip and tilt'''
                 vc = 0.3*self._V/self._D
                 power = -2./3.
-                idx = numpy.where(freq<vc)
+                idx = numpy.where((freq<vc) & (freq>0))
                 shape = numpy.power(freq[idx],power)
                 zfft[idx] *= (shape/numpy.amin(shape))
             else:
@@ -640,19 +644,23 @@ if __name__ == "__main__":
         fig, (ax1,ax2,ax3,ax4,ax5) = pyplot.subplots(1,5)
         pyplot.title(f"Z[{i}] == {i+2} ({zmat2noll_i[i]})")
         im1 = ax1.imshow(phase)
-        dmsurf[numpy.where(dmmap==1)] = DMcube1[i]#numpy.dot(dmZsign*modes, alpao_zmat)
+        dms1 = numpy.copy(DMcube1[i])
+        dms1 = (dms1/numpy.abs(dms1))*numpy.power(numpy.abs(dms1),0.75)
+        dmsurf[numpy.where(dmmap==1)] = dms1#numpy.dot(dmZsign*modes, alpao_zmat)
         print(dmsurf.shape)
         dmsurf = numpy.rot90(dmsurf)
-        im2 = ax2.imshow((dmsurf/numpy.abs(dmsurf))*numpy.power(numpy.abs(dmsurf),0.75))
-        dmsurf*=dmnoedge
-        im3 = ax3.imshow((dmsurf/numpy.abs(dmsurf))*numpy.power(numpy.abs(dmsurf),0.75))
+        vmax = numpy.amax(dmsurf)
+        im2 = ax2.imshow(dmsurf,vmin=-vmax,vmax=vmax)
+        im3 = ax3.imshow(dmsurf*dmnoedge,vmin=-vmax,vmax=vmax)
         
-        dmsurf[numpy.where(dmmap==1)] = DMcube2[i]#numpy.dot(dmZsign*modes, alpao_zmat)
+        dms2 = numpy.copy(DMcube2[i])
+        dms2 = (dms2/numpy.abs(dms2))*numpy.power(numpy.abs(dms2),0.75)
+        dmsurf[numpy.where(dmmap==1)] = dms2#numpy.dot(dmZsign*modes, alpao_zmat)
         print(dmsurf.shape)
         dmsurf = numpy.rot90(dmsurf)
-        im4 = ax4.imshow((dmsurf/numpy.abs(dmsurf))*numpy.power(numpy.abs(dmsurf),0.75))
-        dmsurf*=dmnoedge
-        im5 = ax5.imshow((dmsurf/numpy.abs(dmsurf))*numpy.power(numpy.abs(dmsurf),0.75))
+        vmax = numpy.amax(dmsurf)
+        im4 = ax4.imshow(dmsurf,vmin=-vmax,vmax=vmax)
+        im5 = ax5.imshow(dmsurf*dmnoedge,vmin=-vmax,vmax=vmax)
 # im2 = ax2.imshow((dmsurf/numpy.abs(dmsurf))*numpy.power(numpy.abs(dmsurf),0.75))
     pyplot.show()
     sys.exit(0)

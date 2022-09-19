@@ -5,12 +5,12 @@ import numpy
 DEBUG_BUILD = 0
 DARC_DIR = "darc/"  # uses copies of darc files included here, allows building and installing without a supported darc installed
 
-with open("README.md", "r", encoding="utf-8") as fh:
+with open("Readme.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name = "lark",
-    version = "2022.08.29",
+    version = "2022.8.29",
     author = "David Jenkins",
     author_email = "David.Jenkins@eso.org",
     description = "The Lark RTC Python package",
@@ -57,7 +57,7 @@ setuptools.setup(
         setuptools.Extension("lark.ccirc",
                 sources=["lark/ccircmodule.c"],
                 depends=["lark/ccircmodule.h"],
-                define_macros=[('DEBUG', DEBUG_BUILD)],
+                define_macros=[('DEBUG', DEBUG_BUILD),('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION')],
                 libraries=['rt','zmq'],
                 extra_objects=[DARC_DIR+"src/circ.o",DARC_DIR+"src/mutex.o"],
                 include_dirs=[DARC_DIR+"include/",numpy.get_include()],
@@ -65,14 +65,14 @@ setuptools.setup(
         setuptools.Extension("lark.cbuffer",
                 sources=["lark/cbuffermodule.c"],
                 depends=["lark/cbuffermodule.h"],
-                define_macros=[('DEBUG', DEBUG_BUILD)],
+                define_macros=[('DEBUG', DEBUG_BUILD),('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION')],
                 libraries=['rt'],
                 extra_objects=[DARC_DIR+"src/buffer.o"],
                 include_dirs=[DARC_DIR+"include/",numpy.get_include()],
                 ),
         setuptools.Extension("lark.darc.utils",
                 sources=["lark/darc/utils.c"],
-                define_macros=[('DEBUG', DEBUG_BUILD)],
+                define_macros=[('DEBUG', DEBUG_BUILD),('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION')],
                 libraries=['rt'],
                 extra_objects=[DARC_DIR+"src/mutex.o"],
                 include_dirs=[DARC_DIR+"include/",numpy.get_include()],

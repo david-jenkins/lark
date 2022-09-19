@@ -10,14 +10,14 @@ from lark.display.widgets.misc import LoggerFilePrint
 import pyqtgraph as pg
 pg.setConfigOption('exitCleanup', False)
 
-from lark.display.main import MainWindow, MainWidget as _MainWidget, DisplayWidget as _DisplayWidget
+from lark.display.main import MainLarkWindow, MainDisplay
 from lark.display.modules.wfs import CamControl, PyCircles
 from lark.display.srtc import SrtcMain
 from lark.display.modules.custom import CustomMain
 
-class MainWidget(_DisplayWidget):
-    def __init__(self, larkconfig, srtcname, parent=None, **kwargs):
-        super().__init__(larkconfig, parent=parent)
+class CustomDisplay(MainDisplay):
+    def __init__(self, larkconfig, srtcname, parent=None, daemon_controls=False, **kwargs):
+        super().__init__(larkconfig, parent=parent, daemon_controls=daemon_controls)
         
         # self.widget(0).insertWidget(0,srtc,"SRTC")
         # self.widgets["DARC"]
@@ -89,7 +89,7 @@ def CanapyGUI(prefix="LgsWF",srtc="LabPyTest"):
         larkconfig.getlark()
     except NoLarkError as e:
         return None
-    win = MainWindow(larkconfig, MainWidget, MainWidget, srtcname=srtc)
+    win = MainLarkWindow(larkconfig, CustomDisplay, daemon_controls=False, srtcname=srtc)
     win.setWindowTitle("CaNaPy RTC Control")
     win.show()
     return win

@@ -25,7 +25,7 @@ os.umask(0o002)
 from pathlib import Path
 import sys
 import toml
-from .configLoader import config
+from .configLoader import get_lark_config
 
 from .interface import (connectClient,
                         ControlClient,
@@ -36,23 +36,14 @@ from .interface import (connectClient,
                         get_registry_parameters
                         )
 
-# # read config at /etc/lark.cfg
-# cfile = Path("/etc/lark.cfg")
-# config = {}
-# if cfile.exists():
-#     config.update(toml.load(cfile))
 
-# # read config at $HOME/lark.cfg
-# cfile = Path.home()/"lark.cfg"
-# if cfile.exists():
-#     config.update(toml.load(cfile))
 
-PREFIX = config.get("DEFAULT_PREFIX", None)
-# HOSTNAME = config.get("DEFAULT_HOST", None)
+PREFIX = get_lark_config().DEFAULT_PREFIX
+
 # by default lark will connect to the local daemon
 # to connect to a remote daemon it should be specified during connection
 # e.g. lrk = lark.LarkConfig(prefix="Lgs", hostname="LASERLAB")
-HOSTNAME = get_registry_parameters()["hostname"]
+HOSTNAME = get_registry_parameters().RPYC_HOSTNAME
 
 RTCDS = {}
 SERVICES = {}
@@ -100,6 +91,12 @@ class LarkConfig:
     @hostname.setter
     def hostname(self, value):
         self._hostname = _checkhostname(value)
+        
+    def __enter__(self):
+        return self.getlark()
+        
+    def __exit__(self, *args):
+        self.closelark()
 
     def startlark(self, params):
         try:
@@ -127,19 +124,22 @@ class LarkConfig:
             try:
                 self._lark = ControlClient(self._prefix)
             except ConnectionError as e:
-                raise NoLarkError("No Lark available with this name")
+                raise NoLarkError(f"No Lark available with name {self._prefix}")
             # self._lark.control.print_to(local_print)
             return self._lark
         else:
-            lark = ControlClient(self._prefix)
-            # lark.control.print_to(local_print)
-            return lark
+            try:
+                lark = ControlClient(self._prefix)
+            except ConnectionError as e:
+                raise NoLarkError(f"No Lark available with name {self._prefix}")
+            else:
+                # lark.control.print_to(local_print)
+                return lark
 
     def closelark(self, prefix=None):
         """
         Does not stop the running lark, just closes a connection
         """
-        self.getlark()
         if self._lark is not None:
             try:
                 self._lark.conn.close()
@@ -150,7 +150,10 @@ class LarkConfig:
 
     def stoplark(self, prefix=None):
         """Stops a running lark, either specified by prefix or by global PREFIX"""
-        self.getlark()
+        try:
+            self.getlark()
+        except NoLarkError as e:
+            pass
         if self._lark is not None:
             try:
                 self._lark.stop()
