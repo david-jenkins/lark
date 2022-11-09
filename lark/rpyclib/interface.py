@@ -492,6 +492,13 @@ def connectClient(name):
 
 #### LARK NAMES ####
 
+def newLarkNameServer(ip_addr:str, port:int, mode:str="UDP") -> Union[UDPRegistryServer,TCPRegistryServer]:
+    if mode == "UDP":
+        server = UDPRegistryServer(host=ip_addr, port=port, allow_listing=True, pruning_timeout=16, logger=logger)
+    elif mode == "TCP":
+        server = TCPRegistryServer(host=ip_addr, port=port, allow_listing=True, pruning_timeout=16, logger=logger)
+    return server
+
 def larkNameServer():
     parser = argparse.ArgumentParser(description='Start the RPyC registry server')
 
@@ -530,10 +537,7 @@ def larkNameServer():
     logger = getLogger("rpyc.larkNames")
     log_to_stdout(logger=logger,level="DEBUG")
     try:
-        if args.mode == "UDP":
-            server = UDPRegistryServer(host=ip, port=port, allow_listing=True, pruning_timeout=16, logger=logger)
-        elif args.mode == "TCP":
-            server = TCPRegistryServer(host=ip, port=port, allow_listing=True, pruning_timeout=16, logger=logger)
+        server = newLarkNameServer(ip,port,args.mode)
     except OSError as e:
         if e.errno == 98:
             print("Address already in use. Is larkNames already running?")

@@ -10,9 +10,9 @@ import pyqtgraph as pg
 pg.setConfigOption('exitCleanup', False)
 
 from lark.display.main import MainLarkWindow, MainDisplay
-from lark.display.modules.wfs import CamControl, PyCircles
+from lark.display.canapy.wfs import CamControl, PyCircles
 from lark.display.srtc import SrtcMain
-from lark.display.modules.custom import CustomMain
+from lark.display.canapy.custom import CustomMain
 
 srtc_name = "LabPyTest"
 

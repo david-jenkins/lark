@@ -10,6 +10,9 @@ import numpy
 PHOTONS_PER_S_PER_M2_PER_WATT = PSM2W = 600000.0
 DUTY33_INT_TIME_MUS = 57.0
 
+MEANNAALT = 91
+
+D = 1.0
 c_m = 299705000
 l = 1000
 t = 0.000001
@@ -18,11 +21,18 @@ c = c_m*t/l
 km_per_step = 2
 time_per_step = km_per_step/c
 sanity = 0
+pi = numpy.pi
+power = 70
+elevation = 2.39
+
+def NA_photon_return(distance, deltaT):
+    A = power*PSM2W*deltaT*(10**(-6))*(pi*(D/2)**2)*(MEANNAALT-elevation)**2
+    return A*distance**(-2)
 
 def calc_dist(alt, angle):
     rad_m = 6375783.316
     rad = rad_m/l
-    elev = 2.39
+    elev = elevation
     hyp = 1000
     
     angle = 90-angle
@@ -53,7 +63,7 @@ def gaussian(x, mu, sig):
 
 def rayleigh(alt, offset=0, stretch=1):
     x = 1000*(alt-offset)/stretch # convert from km and transform
-    return (2.551555e-13*numpy.power(x,3)-1.688837e-8*numpy.power(x,2)+3.567613e-4*x-2.406285)*10 # *10 for 60W
+    return (2.551555e-13*numpy.power(x,3)-1.688837e-8*numpy.power(x,2)+3.567613e-4*x-2.406285)*power 
 
 class Sim():
     def __init__(self):
@@ -157,12 +167,12 @@ class Sim():
         self.update()
         
     def autoPulse(self, onoff:bool):
-        print("Auto pulse = ",onoff)
+        print(f"Auto pulse = {onoff}")
         self.calc_pulse = onoff
         self.update()
 
     def autoExposure(self, onoff:bool):
-        print("Auto pulse = ",onoff)
+        print(f"Auto expose = {onoff}")
         self.calc_exposure = onoff
         self.update()
 
@@ -187,9 +197,9 @@ class Sim():
 
         self.ra_dist = calc_dist(self.ra_alt,self.angle)
         
-        self.calc_flux()
+        self.calc_photons()
         
-    def calc_flux(self):
+    def calc_photons(self):
         # from matplotlib import pyplot
         pt1 = 2*self.na_dist_1/c
         pt2 = 2*self.na_dist_2/c
@@ -201,18 +211,28 @@ class Sim():
         
         profile = numpy.zeros_like(time_values)
         
-        photons = 60*(self.duty/100.)*6e5*0.71*t*180
+        # photons = 60*(self.duty/100.)*6e5*0.71*t*180
+        # print(f"photons = {photons}")
+        # print(f"time_per_step = {time_per_step}")
+        
+        photons = NA_photon_return(calc_dist(self.na_alt,self.angle), self.pulse)
 
-        profile += (3*photons/4)*gaussian(time_values,(pt1+pt2)/2-(pt2-pt1)/4,(pt1+pt2)/70)
-        profile += (photons/4)*gaussian(time_values,(pt1+pt2)/2+(pt2-pt1)/4,(pt1+pt2)/70)
+        profile += (3*photons/4)*gaussian(time_values, (pt1+pt2)/2-(pt2-pt1)/4, (pt1+pt2)/70)
+        profile += (photons/4)*gaussian(time_values, (pt1+pt2)/2+(pt2-pt1)/4, (pt1+pt2)/70)
 
         print(f"Photons from Na = {photons}")
         
-        print(f"Area = {numpy.trapz(profile,x=time_values)}")
+        print(f"Area = {numpy.trapz(profile, x=time_values)}")
         
         pulse_fn = numpy.ones(int(self.pulse/time_per_step))*0.25
+        # print(f"sum = {numpy.sum(pulse_fn)}")
         
-        self.naflux = numpy.convolve(pulse_fn,profile,"full")
+        # pulse_tm = numpy.arange(int(self.pulse/time_per_step))*time_per_step
+        # pulse_fn /= numpy.trapz(pulse_fn,x=pulse_tm)
+        
+        # print(f"Pulse photons = {numpy.trapz(pulse_fn,x=pulse_tm)}")
+        
+        self.naflux = numpy.convolve(pulse_fn, profile, "full")
         
         airmass = 1/numpy.cos(self.angle*numpy.pi/180.)
         
@@ -226,15 +246,15 @@ class Sim():
         # ra_eq_na = 2*2/(c*numpy.cos((self.angle)*numpy.pi/180.))
         # ra_scale = 2*30/c
         # ra_scale = ra_end
-        # # profile += 2*gaussian(time_values,0,1.5*self.na_dist_1)
+        profile += 10*photons*gaussian(time_values, -100, 1.8*self.na_dist_1)
         # ra_profile = 0.8*numpy.amax(profile)*(numpy.exp(-5.5*time_values/ra_scale)/numpy.exp(-5.5*ra_eq_na/ra_scale))
         
-        ind = numpy.where((height_values>rd1) & (height_values<rd2))
-        ra_height = height_values[ind]
-        ra_time = ra_height/c
-        ra_profile = rayleigh(ra_height,stretch=airmass)*2*(self.duty/100.)*10
-        print(f"Photons from Ra = {numpy.trapz(ra_profile,x=ra_time)}")
-        profile[ind] += ra_profile
+        # ind = numpy.where((height_values>rd1) & (height_values<rd2))
+        # ra_height = height_values[ind]
+        # ra_time = ra_height/c
+        # ra_profile = rayleigh(ra_height, stretch=airmass)#*2*(self.duty/100.)*10
+        # print(f"Photons from Ra = {numpy.trapz(ra_profile, x=ra_time)}")
+        # profile[ind] += ra_profile
         # profile[numpy.where(time_values<ra_start)] = 0
         # profile[numpy.where((time_values<pt1) & (time_values>ra_end))] = 0
         
