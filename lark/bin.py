@@ -8,6 +8,9 @@ def larkNames():
     larkNameServer()
 
 def larkDaemon():
+    """A helper function that is called when using the larkDaemon on the command line
+    It runs the startDaemon function from the daemon module :ref:`start_daemon`.
+    """
     from .daemon import startDaemon
     startDaemon()
 

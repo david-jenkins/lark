@@ -257,6 +257,9 @@ class Sim():
         # profile[ind] += ra_profile
         # profile[numpy.where(time_values<ra_start)] = 0
         # profile[numpy.where((time_values<pt1) & (time_values>ra_end))] = 0
+        print(f"len(profile) = {len(profile)}")
+        print(f"int(2*20/c) = {int(2*20/c)}")
+        profile[:20] = 0
         
         if sanity:
             ra1 = 2*ra1/(c*numpy.cos((self.angle)*numpy.pi/180.))

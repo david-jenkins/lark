@@ -1,6 +1,6 @@
 
 # get the conenctClient helper
-from rpycserver import connectClient
+from lark.tools.rpycserver import connectClient
 
 if __name__ == "__main__":
     

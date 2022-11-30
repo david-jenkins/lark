@@ -4,7 +4,6 @@ import sys
 import logging
 import subprocess
 import time
-import datetime
 import inspect
 
 from lark import LarkConfig, NoLarkError
@@ -21,7 +20,7 @@ from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
 from lark.display.wfs import WfsImages
 from lark.display.widgets.main_base import SubTabWidget, TabWidget
-from lark.utils import generatePyrParams, statusBuf_tostring
+from lark.utils import generatePyrParams, statusBuf_tostring, get_datetime_stamp
 
 import pyqtgraph as pg
 
@@ -231,14 +230,14 @@ class CalibrationWindowBoth(QtW.QWidget):
         evtfps = self.evtfpsbox.value()
         ocamgain = self.ocamgainbox.value()
         evtgain = self.evtgainbox.value()
-        now = datetime.datetime.now()
+        now = get_datetime_stamp()
         text = self.filenamepreview.text().split("\n")[0] + "\n"
         fname = self.saveimstext.text()
         if fname != "":
             fname += "_"
         self.fname = str(self.dir_path / fname)
         self.fname += f"oc{ocamfps}-{ocamgain}evt{evtfps}-{evtgain}_"
-        self.fname += f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
+        self.fname += now
         text += self.fname
         self.filenamepreview.setText(text)
 
@@ -490,8 +489,8 @@ class CamControl(CamControl_base):
             fname = str(self.saveimstext.text())
             if fname == "":
                 fname = "darc_ims"
-            now = datetime.datetime.now()
-            fname += "-{:0>2}{:0>2}{:0>2}".format(now.hour,now.minute,now.second)
+            date_now, time_now = get_datetime_stamp(split=True)
+            fname += "-" + time_now
             from lark.parallel import threadSynchroniser
         
             ims = threadSynchroniser([pyr_darc.getStreamBlock,sco_darc.getStreamBlock],args=[("rtcPxlBuf",nim),("rtcPxlBuf",nim)])

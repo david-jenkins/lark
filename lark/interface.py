@@ -43,7 +43,7 @@ def stopDaemon(hostname:str = None):
     else:
         h.unblock()
 
-def startServiceClient(service_class,name,*,hostname=None,params=None):
+def startServiceClient(service_class, name, *, hostname=None, params=None):
     """_summary_
 
     Args:
@@ -62,7 +62,7 @@ def startServiceClient(service_class,name,*,hostname=None,params=None):
     h = connectDaemon(hostname)
     # service_class_pckl = pickle.dumps(service_class)
     service_class_pckl = service_class
-    h.startservice(service_class_pckl,name)
+    retval = h.startservice(service_class_pckl,name)
     cnt = 10
     err = Exception()
     while cnt:

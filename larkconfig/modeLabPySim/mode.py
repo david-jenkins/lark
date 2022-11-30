@@ -5,13 +5,17 @@ It defines an operating mode of the RTC including which darcs to start.
 It also loads the functions for the SRTC system which is launched
 using this script.
 """
+import numpy
+import toml
 import lark
+from lark.utils import get_datetime_stamp
 from pathlib import Path
 
 # file_path is needed for relative file locations
 # all paths are relative to the 2nd parent directory
 # so it's easier to get darc configs and files from other modes
 file_name = Path(__file__).parent.stem.replace("mode","")
+mode_path = Path(__file__).parent.resolve()
 file_path = Path(__file__).parent.parent.resolve()
 
 host = "localhost"
@@ -31,8 +35,20 @@ services = {
     "LgsWFiPortSRTC": ("iPortService","modeLabPySim/iport.py",host)
 }
 
+srtc_config = toml.load(mode_path/"config.toml")
+
+def replace_filenames(srtc_config):
+    for key,value in srtc_config.items():
+        if isinstance(value,str) and ".npy" in value:
+            srtc_config[key] = numpy.load(mode_path/value)
+        elif isinstance(value,dict):
+            srtc_config[key] = replace_filenames(value)
+    return srtc_config
+
+srtc_config = replace_filenames(srtc_config)
+
 services_config = {
-    "LabPySimSRTC": {"srtcname":"LabPySim"}
+    "LabPySimSRTC": {"srtcname":"LabPySim",**srtc_config,"dateNow":get_datetime_stamp(split=True)[0]}
 }
 
 GUI = ("CanapyGUI", "modeLabPyTest/gui.py")
@@ -130,6 +146,9 @@ Services: {nlspsp}{nlspsp.join([f'{k} -> {", ".join(v)}' for k,v in md.services.
 Description: {nlspsp}{md.info}"""
 
     print(info)
+    
+    print(srtc_config.keys())
+    # ddd
 
 
     stop()
@@ -147,9 +166,20 @@ Description: {nlspsp}{md.info}"""
     s = lark.getservice(srtcname)
 
     print(s.getPlugin())
+    
+    # s.Configure(file_name="/tmp/data")
 
-    print(s.save_data.run(file_name="/tmp/data"))
+    print(s.save_data.run())
 
     print(s.getResult())
+    
+    # from lark import copydict
+    # s.Configure(**copydict(srtc_config))
+    
+    # print(s.parameters)
+    
+    print(s.getParameters())
+    
+    print(s.getPlugin("save_data").Values())
 
     # s.stop()

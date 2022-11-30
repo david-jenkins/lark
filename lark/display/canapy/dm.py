@@ -19,9 +19,9 @@ import time
 import logging
 from lark.tools.zenturgen import AtmosphereGenerator
 import scipy.io
-import datetime
 from pathlib import Path
 from astropy.io import fits
+from lark.utils import get_datetime_stamp
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -524,8 +524,8 @@ class DmControl(Dm,QtW.QWidget):
         self.update_image()
 
     def saveFlat(self):
-        now  = datetime.datetime.now()
-        fname = HOME+"/data/"+f"flat{now.day:02}{now.month:02}{now.hour:02}{now.minute:02}.txt"
+        now = get_datetime_stamp()
+        fname = HOME+"/data/"+f"flat{now}.txt"
         get_name = QtW.QFileDialog.getSaveFileName(self, 'Save Shape', fname,"Text files (*.txt)",options=QtW.QFileDialog.DontUseNativeDialog)
         fname = get_name[0]
         if fname != "":

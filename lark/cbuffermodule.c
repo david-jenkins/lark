@@ -154,7 +154,7 @@ cParamBuf_setactive(cParamBuf *self,  PyObject *value, void *closure)
     if (val==active) {
         return 0;
     }
-    if (switchBuffer(self->pbufs,0)) {
+    if (switchBuffer(self->pbufs,0)==-1) {
         PyErr_SetString(BufferError,"Error in switchBuffer");
         self->buffer_open = 0;
         return -1;
@@ -183,7 +183,7 @@ cParamBuf_setinactive(cParamBuf *self,  PyObject *value, void *closure)
     if (val==inactive) {
         return 0;
     }
-    if (switchBuffer(self->pbufs,0)) {
+    if (switchBuffer(self->pbufs,0)==-1) {
         PyErr_SetString(BufferError,"Error in switchBuffer");
         self->buffer_open = 0;
         return -1;
@@ -486,13 +486,13 @@ cParamBuf_switch(cParamBuf *self, PyObject *args){
         PyErr_SetString(PyExc_ValueError,"wait is not 0 or 1");
         return NULL;
     }
-
-    if (switchBuffer(self->pbufs,wait)) {
+    int frameno = switchBuffer(self->pbufs,wait);
+    if (frameno==-1) {
         PyErr_SetString(BufferError,"Error in switchBuffer");
         self->buffer_open = 0;
         return NULL;
     }
-    return Py_INCREF(Py_None), Py_None;
+    return PyLong_FromLong(frameno);
 }
 
 static PyObject *
@@ -536,7 +536,7 @@ cParamBuf_switchonframe(cParamBuf *self, PyObject *args){
 
     printf("Switching on frame %d\n",fnum);
 
-    if (switchBuffer(self->pbufs,0)) {
+    if (switchBuffer(self->pbufs,0)==-1) {
         PyErr_SetString(BufferError,"Error in switchBuffer");
         self->buffer_open = 0;
         return NULL;
@@ -654,6 +654,8 @@ PyInit_cbuffer(void)
 
 int
 switchBuffer(paramBuf *pbufs[2], int wait) {
+    /* Returns the frame number before the switch or -1 on failure
+    */
     // printf("Switch buffer...\n");
     bufferVal *bval;
     int val = 1;
@@ -665,15 +667,21 @@ switchBuffer(paramBuf *pbufs[2], int wait) {
     bval->size = 4;
     bval->data = &val;
     int index = bufferGetActive(pbufs);
+    char fnoname[] = "frameno";
+    bufferVal *fnoval = bufferGetWithShape(pbufs[index],fnoname);
     char name[] = "switchRequested";
     bufferSetIgnoringLock(pbufs[index],name,bval);
     int err = bufferWait(pbufs[index]);
     if (err==1) {
         printf("Buffer has left the building");
-        return 1;
+        return -1;
     }
     bufferCopyToInactive(pbufs);
-    return 0;
+    if (fnoval!=NULL){
+        val = *(int *)(fnoval->data);
+    }
+    free(fnoval);
+    return val;//;
 }
 
 PyObject *

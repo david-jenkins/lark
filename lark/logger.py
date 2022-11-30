@@ -8,7 +8,9 @@ from inspect import stack
 
 logger_format = logging.Formatter(logging.BASIC_FORMAT)
 
-log_dir = Path("/var/log/lark")
+from lark import get_lark_config
+
+LOG_DIR = get_lark_config().LOG_DIR
 
 STREAM_LEVEL = "INFO"
 FILE_LEVEL = "INFO"
@@ -21,9 +23,9 @@ def log_to_stdout(logger=None,level=STREAM_LEVEL):
     logger.addHandler(streamhandler)
     return streamhandler
 
-if not log_dir.exists():
+if not LOG_DIR.exists():
     om = os.umask(0o002)
-    log_dir.mkdir(mode=0o2777,parents=True)
+    LOG_DIR.mkdir(mode=0o2777,parents=True)
     os.umask(om)
 
 def addLoggingLevel(levelName, levelNum, methodName=None):
@@ -92,7 +94,7 @@ class RotatingFileHandler(handlers.RotatingFileHandler):
         return retval
 
 def log_to_file(name, level=FILE_LEVEL, logger=None):
-    filehandler = RotatingFileHandler(log_dir/f'{name}.log',maxBytes=1000000,backupCount=4)
+    filehandler = RotatingFileHandler(LOG_DIR/f'{name}.log',maxBytes=1000000,backupCount=4)
     filehandler.setFormatter(logger_format)
     filehandler.setLevel(logging.getLevelName(level))
     if logger is None: logger = logging.getLogger()
@@ -151,7 +153,7 @@ def log_to_file(name, level=FILE_LEVEL, logger=None):
 #     def __init__(self, name, level='DEBUG', propagate=False):
 #         super().__init__(name, level=level, propagate=propagate)
 
-#         self.filehandler = RotatingFileHandler(log_dir/f'{name}.log',maxBytes=1000000,backupCount=4)
+#         self.filehandler = RotatingFileHandler(LOG_DIR/f'{name}.log',maxBytes=1000000,backupCount=4)
 #         self.filehandler.setFormatter(logger_format)
 #         self.filehandler.setLevel(logging.getLevelName(level))
 #         self.logger.addHandler(self.filehandler)

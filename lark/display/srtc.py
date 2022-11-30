@@ -59,7 +59,7 @@ class SrtcFunctionList(SrtcFunctionList_base):
             print(name)
             function = lark.getservice(self.name).getPlugin(name)
             print(function)
-            values = function.values
+            values = function.Values()
             self.param_tree.setData(values)
 
     def on_connect(self):

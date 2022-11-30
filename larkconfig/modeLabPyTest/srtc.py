@@ -4,17 +4,40 @@
 from lark.rpyclib.interface import BgServer
 from pathlib import Path
 from typing import Any, Union
-from lark.utils import appendSimpleDict, make_data_dirs, saveDict, saveDictDiff, saveSimpleDict
+from lark.utils import appendSimpleDict, make_data_dirs, saveDict, saveDictDiff, saveSimpleDict, get_datetime_stamp
 import numpy
-from lark import LarkConfig, NoLarkError
+from lark import LarkConfig, NoLarkError, get_lark_config
 from lark.services import BaseService, BasePlugin
 
 class CanapySrtc(BaseService):
     PLUGINS = {}
     RESULTS = {}
     INITIALISED = {}
+    PARAMETERS = {}
     def notify(self, *args):
         print(*args)
+
+@CanapySrtc.register_plugin("save_parameters")
+class SaveParameters(BasePlugin):
+    def Init(self):
+        self.defaults = {
+            "dateNow": get_datetime_stamp(split=True)[0],
+            "srtcName": "LabPyTest",
+            "modeName": "modeLabPyTest",
+            "prefixes": ["LgsWF","PyScoring"]
+        }
+        date_now, time_now = get_datetime_stamp(split=True)
+        self.save_dir = get_lark_config().PARAM_DIR/self["modeName"]
+        for prefix in self["prefixes"]:
+            lrk = LarkConfig(prefix).getlark()
+            lrk.setSaveDir(self.save_dir)
+
+    def Execute(self):
+        for prefix in self["prefixes"]:
+            lrk = LarkConfig(prefix).getlark()
+            lrk.saveParamBuf()
+        saveDict(self._values,self.save_dir/self["dateNow"])
+        
 
 # @CanapySrtc.register_plugin("data_saver")
 class DataSaver(BasePlugin):
@@ -22,7 +45,7 @@ class DataSaver(BasePlugin):
     For saving parameter buffers and command telemetry saving"""
     def Init(self):
         self.defaults = {
-            "srtcname":"LabPyTest",
+            "srtcName":"LabPyTest",
             "prefixes":["LgsWF","PyScoring"],
             "info":{},
         }
@@ -35,14 +58,14 @@ class DataSaver(BasePlugin):
         self.changes = {}
         self.telemfiles = []
         self.saved = {}
-        self.first_run = True
+        self.first_run = False
         self.larks = None
         self.srtcinfofile = None
         
     def update_info(self, values:dict):
         self["info"].update(values)
 
-    def Configure(self, srtcname: str = None, prefixes: list = None, info: dict = None):
+    def Configure(self, srtcName: str = None, prefixes: list = None, info: dict = None):
         if info: self.update_info(info)
         info = None
         kwargs = {key:value for key,value in locals().items() if key in self.defaults and value is not None}
@@ -56,8 +79,8 @@ class DataSaver(BasePlugin):
         else:
             if self.first_run:
                 self.params = {prefix:lrk.getChanges(True) for prefix,lrk in self.larks.items()}
-                self.srtcdir,self.prefixdirs,self.tstamp = make_data_dirs(self["srtcname"],self["prefixes"])
-                self.srtcinfofile = saveSimpleDict({"name":self["srtcname"]},self.srtcdir/"info")
+                self.srtcdir, self.prefixdirs, self.tstamp = make_data_dirs(self["srtcName"],self["prefixes"])
+                self.srtcinfofile = saveSimpleDict({"name":self["srtcName"]},self.srtcdir/"info")
                 print(self.srtcdir,self.prefixdirs,self.tstamp)
                 for prefix,params in self.params.items():
                     self.prefixdirs[prefix] = saveDict(params[list(params.keys())[1]],self.prefixdirs[prefix]/self.prefixdirs[prefix].name)
@@ -81,7 +104,7 @@ class DataSaver(BasePlugin):
             self["info"] = {}
 
     def Finalise(self):
-        self.result = f"{self['srtcname']}, {self['prefixes']}", self.saved
+        self.result = f"{self['srtcName']}, {self['prefixes']}", self.saved
 
     def stop(self):
         for lrk in self.larks.values():

@@ -33,12 +33,13 @@ from .interface import (connectClient,
                         connectDaemon,
                         startServiceClient,
                         larkNameServer,
-                        get_registry_parameters
+                        get_registry_parameters,
+                        copydict
                         )
 
 
 
-PREFIX = get_lark_config().DEFAULT_PREFIX
+DEFAULT_PREFIX = get_lark_config().DEFAULT_PREFIX
 
 # by default lark will connect to the local daemon
 # to connect to a remote daemon it should be specified during connection
@@ -54,65 +55,63 @@ def local_print(*args,**kwargs):
 class NoLarkError(BaseException):
     """An exeption for no lark available"""
 
-def _checkprefix(_prefix):
-    global PREFIX
-    if _prefix is None:
-        if PREFIX is None:
-            raise RuntimeError("No prefix specified")
-        _prefix = PREFIX
-    return _prefix
-
-def _checkhostname(_hostname):
-    global HOSTNAME
-    if _hostname is None:
-        if HOSTNAME is None:
-            raise RuntimeError("No prefix specified")
-        _hostname = HOSTNAME
-    return _hostname
-
 class LarkConfig:
-    def __init__(self, prefix=None, hostname=None):
-        self._prefix = _checkprefix(prefix)
-        self._hostname = _checkhostname(hostname)
+    """Used to connect to a lark instance and control it.
+    Basic usage: LarkControl.getlark(prefix) -> a lark object
+    """
+    def __init__(self, prefix:str=DEFAULT_PREFIX, hostname:str=HOSTNAME):
+        self.prefix = prefix
+        self.hostname = hostname
         self._lark = None
 
-    @property
-    def prefix(self):
-        return self._prefix
-
-    @prefix.setter
-    def prefix(self, value):
-        self._prefix = _checkprefix(value)
-
-    @property
-    def hostname(self):
-        return self._hostname
-
-    @hostname.setter
-    def hostname(self, value):
-        self._hostname = _checkhostname(value)
-        
     def __enter__(self):
         return self.getlark()
         
     def __exit__(self, *args):
         self.closelark()
 
-    def startlark(self, params):
+    def startlark(self, params:dict):
+        """Start the lark instance throught the daemon with self.hostname
+
+        Args:
+            params (dict): Parameters for initialisation
+
+        Returns:
+            ControlClient: The RPyC client to control lark
+        """
         try:
             return self.getlark()
         except NoLarkError:
-            self._lark = startControlClient(self._prefix,hostname=self._hostname,params=params)
+            self._lark = startControlClient(self.prefix,hostname=self._hostname,params=params)
             # self._lark.control.print_to(local_print)
             return self._lark
             
-    def startlocal(self, params):
+    def startlocal(self, params:dict):
+        """Not yet implemented, start a local lark instance and not through the daemon
+
+        Args:
+            params (dict): Parameters for initialisation
+
+        Returns:
+            _type_: _description_
+        """
         try:
             return self.getlark()
         except NoLarkError:
             pass
 
-    def getlark(self, unique=False) -> ControlClient:
+    def getlark(self, unique:bool=False) -> ControlClient:
+        """Get a ControlClient object associated with this LarkConfig
+
+        Args:
+            unique (bool, optional): whether to request a new connection. Defaults to False and the previous connection is reused.
+
+        Raises:
+            NoLarkError: If no lark is available with this prefix
+
+        Returns:
+            ControlClient: The lark object
+        """
         if not unique:
             if self._lark is not None:
                 try:
@@ -122,23 +121,23 @@ class LarkConfig:
                 else:
                     return self._lark
             try:
-                self._lark = ControlClient(self._prefix)
+                self._lark = ControlClient(self.prefix)
             except ConnectionError as e:
-                raise NoLarkError(f"No Lark available with name {self._prefix}")
+                raise NoLarkError(f"No Lark available with name {self.prefix}")
             # self._lark.control.print_to(local_print)
             return self._lark
         else:
             try:
-                lark = ControlClient(self._prefix)
+                lark = ControlClient(self.prefix)
             except ConnectionError as e:
-                raise NoLarkError(f"No Lark available with name {self._prefix}")
+                raise NoLarkError(f"No Lark available with name {self.prefix}")
             else:
                 # lark.control.print_to(local_print)
                 return lark
 
     def closelark(self, prefix=None):
         """
-        Does not stop the running lark, just closes a connection
+        Does not stop the running lark, just closes the current connection
         """
         if self._lark is not None:
             try:
@@ -148,8 +147,8 @@ class LarkConfig:
             else:
                 self._lark = None
 
-    def stoplark(self, prefix=None):
-        """Stops a running lark, either specified by prefix or by global PREFIX"""
+    def stoplark(self):
+        """Stops the running lark associated with this LarkConfig"""
         try:
             self.getlark()
         except NoLarkError as e:
@@ -162,9 +161,16 @@ class LarkConfig:
             else:
                 self._lark = None
 
-def getdaemon(hostname=None):
+def getdaemon(hostname:str=HOSTNAME):
+    """Get the RPyC object for the daemon with the hostname specified
+
+    Args:
+        hostname (str, optional): hostname of daemon. Defaults to None.
+
+    Returns:
+        RemoteClient: An RPyC client to the daemon
+    """
     global RTCDS
-    hostname = _checkhostname(hostname)
     rtcd = RTCDS.get(hostname,None)
     if rtcd is not None:
         try:
@@ -190,8 +196,7 @@ def getservice(name):
     SERVICES[name] = connectClient(name)
     return SERVICES[name]
 
-def startservice(service_class, name, hostname=None):
-    hostname = _checkhostname(hostname)
+def startservice(service_class, name, hostname=HOSTNAME):
     try:
         return getservice(name)
     except Exception as e:

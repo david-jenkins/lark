@@ -7,7 +7,7 @@ from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
 
-from lark import LarkConfig, NoLarkError
+from lark import LarkConfig, NoLarkError, get_lark_config
 from lark.interface import connectDaemon
 
 class RemoteFilePicker(QtW.QDialog):
@@ -454,7 +454,7 @@ class DaemonTestWidget(QtW.QWidget):
 
 def main():
     app = QtW.QApplication(sys.argv)
-    win = DaemonTestWidget("LaserLab","/var/log/lark")
+    win = DaemonTestWidget("LaserLab", get_lark_config().LOG_DIR)
     # win = TestWidget(larkconfig=LarkConfig("LgsWF"))
     win.show()
     sys.exit(app.exec_())

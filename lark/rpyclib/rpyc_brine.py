@@ -10,8 +10,13 @@ class copydict(dict):
     therefore can be distinguished from normal dicts,
     this is used to copy a dict by values through rpyc.
     A normal dict will be passed as a netref.
+    Now handles nested dicts at init.
     """
-    pass
+    def __init__(self, indict={}):
+        for key,value in indict.items():
+            if isinstance(value,dict):
+                indict[key] = copydict(value)
+        super().__init__(indict)
 
 my_types = [numpy.ndarray, copydict, list, numpy.int32, numpy.int64, numpy.float32, numpy.float64, Path, PurePath, PurePosixPath, PosixPath]
 

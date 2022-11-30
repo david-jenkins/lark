@@ -1,4 +1,4 @@
-import datetime
+
 import os
 from typing import Dict
 import rpyc
@@ -15,32 +15,64 @@ import sys
 from astropy.io import fits
 from lark.parallel import threadSynchroniser, processSynchroniser
 from pathlib import Path
-import lark.utils
-from lark import LarkConfig
-
+from lark.utils import get_datetime_stamp
+from lark import LarkConfig, get_lark_config
+from lark.tools import cfits
 from logging import getLogger
 
 '''
     Data is saved in .cfits files with little endianness....
    .cfits files need converting to .fits (big endian) if opening with 
-   any standard fits library...
+   any standard fits library... can use tools in lark.tools.cfits to work with them
 '''
-
-FRAMES_PER_FILE = 100000
-MAX_FILE_SIZE = 100000000
+FRAMES_PER_FILE = 1000
+# MAX_FILE_SIZE = 100000000 # 100MB + headers&ftime&fnum
+# MAX_FILE_SIZE = 50000000 # 50MB
+MAX_FILE_SIZE = 200000000 # 200MB
 
 CNT = 0
 
+DATA_DIR = get_lark_config().DATA_DIR
+
 from lark.configLoader import get_lark_config
 
-def make_cfits(fname, delem, dtype, frames=None, header=None, overwrite=0):
+def make_array_header_from_dtype_shape(dtype,shape,fortran_order=False):
+    d = {'shape': shape,'fortran_order': fortran_order}
+    d['descr'] = numpy.lib.format.dtype_to_descr(dtype)
+    header = ["{"]
+    for key, value in sorted(d.items()):
+        # Need to use repr here, since we eval these when reading
+        header.append("'%s': %s, " % (key, repr(value)))
+    header.append("}")
+    header = "".join(header)
+    header = numpy.lib.format._wrap_header(header, (1, 0))
+    return header
+
+def make_npy(fname, size, dtype, frames=None, overwrite=False):
+    fname = Path(fname).with_suffix(".npy")
+    if not overwrite:
+        if fname.exists():
+            raise FileExistsError(f"{fname} already exists")
+    cbuf_header = numpy.dtype("i4, i4, f8, (1,4)b, i4, i4, i4")
+    cbuf_type = numpy.dtype([("hdr",cbuf_header),("data",dtype,(size,))])
+    header = make_array_header_from_dtype_shape(cbuf_type,(frames,))
+    with fname.open("wb+") as fp:
+        fp.write(header)
+        fp.seek(cbuf_type.itemsize*frames-1,1)
+        fp.write(b'\0')
+    print(len(header))
+    print(cbuf_type.itemsize*frames)
+    
+    return str(fname), len(header)
+
+def make_cfits(fname, delem:int, dtype, frames=None, header=None, overwrite=False):
     """ Generate a large empty cfits file on disk.
     A cfits file is similar to a fits file but the data is little endian
     and unsigned integers are stored as-is, data is copied directly from C
 
     Args:
         fname ([type]): [description]
-        delem ([type]): [description]
+        delem ([type]): number of elements of data, integer
         dtype ([type]): [description]
         frames ([type], optional): [description]. Defaults to None.
 
@@ -60,7 +92,8 @@ def make_cfits(fname, delem, dtype, frames=None, header=None, overwrite=0):
     header3 = hdu3.header
 
     if frames is None:
-        frames = FRAMES_PER_FILE
+        # frames = FRAMES_PER_FILE
+        frames = int(MAX_FILE_SIZE/(delem*dtype.itemsize))
 
     # while len(header) < (36 * 4 - 1):
     #     header.append()
@@ -81,7 +114,7 @@ def make_cfits(fname, delem, dtype, frames=None, header=None, overwrite=0):
         for key,value in header:
             header1[key] = value
 
-    header1.tofile(strname,overwrite=bool(overwrite))
+    header1.tofile(strname,overwrite=overwrite)
 
     shape1 = tuple(header1[f'NAXIS{ii}'] for ii in range(1, header1['NAXIS']+1))
     shape2 = tuple(header2[f'NAXIS{ii}'] for ii in range(1, header2['NAXIS']+1))
@@ -158,7 +191,6 @@ class CircReader(cCircReader):
         self._thread = None
         self.thread_started = False
         self.thread_users = 0
-        self.dir = Path(get_lark_config().DATA_DIR)
         self.logger = getLogger(f"{prefix}.{streamName}")
 
     def start(self, started=True):
@@ -205,9 +237,17 @@ class CircReader(cCircReader):
             self.go_event.set()
             self._thread.join()
         print("Stopped cb thread")
+        
+    @property
+    def prefix(self) -> str:
+        return self._prefix#
+    
+    @property
+    def streamName(self) -> str:
+        return self._streamName
 
     @property
-    def decimation(self):
+    def decimation(self) -> int:
         return self.get_decimation()
 
     @decimation.setter
@@ -242,17 +282,6 @@ class CircReader(cCircReader):
         self._multicast = value
 
     @property
-    def dataDir(self):
-        return self._dir
-
-    @dataDir.setter
-    def dataDir(self, value):
-        if type(value) is not str:
-            raise TypeError("Needs a string")
-        else:
-            self._dir = Path(value)
-
-    @property
     def shape(self):
         return self._shape
 
@@ -284,6 +313,12 @@ class CircReader(cCircReader):
         """The number of elements"""
         shape = self._size
         return shape
+        
+    def getFrameSize(self):
+        return self._frame_size
+
+    def getDataSize(self):
+        return self._frame_size-32
 
     def getDataType(self):
         chartype = chr(self._dtype)
@@ -498,15 +533,16 @@ class CircReader(cCircReader):
     # def wait_for_save(self, a):
     #     print("Doing wait for save with ", a)
     #     return super().wait_for_save(a)
-
-    def saveFrames(self, fname, frames, overwrite=0):
+    def prepareSave(self, fpath, frames, datetime=None, overwrite=False, fname_suffix=""):
+        assert frames!=0
+        FRAMES_PER_CHUNK = self.FRAMES_PER_CHUNK
         self._temp_start()
-        fpath = Path(fname)
-        if not fpath.is_absolute():
-            fpath = (self._dir / fpath).resolve()
-        else:
-            fpath = fpath.resolve()
+        requested_frames = frames
+        if datetime is None: datetime = get_datetime_stamp(microseconds=True)
+        fpath = Path(fpath)/f"{self.streamName}-{datetime}{fname_suffix}"
         framesperfile = int(MAX_FILE_SIZE/(self.getSize()*self.getDataType().itemsize))
+        framesperfile = (framesperfile//FRAMES_PER_CHUNK)*FRAMES_PER_CHUNK
+        frames = (frames//FRAMES_PER_CHUNK+2)*FRAMES_PER_CHUNK
         print("Frames per file = ",framesperfile)
         wholefiles = frames//framesperfile
         print(f"wholefiles = {wholefiles}")
@@ -520,47 +556,223 @@ class CircReader(cCircReader):
 
         fileh = [None,None]
         findex = [None,None]
-        saved = 0
-        for i in range(wholefiles+int(remainder>0)):
+        fnames = [None,None]
+        
+        # do the first file
+        _frames = framesperfile if wholefiles>0 else remainder
+        fname = fpath.with_name(fpath.name+f"-{0:0>3}")
+        try:
+            fnames[0], d, t, n = make_cfits(fname, self.getSize(), self.getDataType(), frames=_frames, overwrite=overwrite)
+        except OSError as e:
+            self.cancel_save()
+            raise FileExistsError(str(e))
+        fileh[0] = open(fnames[0], mode="rb+")
+        print("preparing findex[0]")
+        findex[0] = self.prepare_save(fileh[0].fileno(),d,d+t,d+t+n,_frames)
+        print(f"prepared findex[0] = {findex[0]}")
+        i = 0
+
+        # if there is more than one, start preparing the next
+        for i in range(1,wholefiles+1):
             fname = fpath.with_name(fpath.name+f"-{i:0>3}")
-            if (frames-saved)//framesperfile > 0:
-                _frames = framesperfile
+            if i==wholefiles:
+                _frames = remainder
             else:
-                _frames = (frames-saved)%framesperfile
+                _frames = framesperfile
             try:
-                fname , d, t, n = make_cfits(fname,self.getSize(),self.getDataType(),frames=_frames,overwrite=overwrite)
+                fnames[i%2] , d, t, n = make_cfits(fname,self.getSize(),self.getDataType(),frames=_frames,overwrite=overwrite)
             except OSError as e:
                 self.cancel_save()
                 raise FileExistsError(str(e))
-            fileh[i%2] = open(fname,mode="rb+")
+            fileh[i%2] = open(fnames[i%2],mode="rb+")
             print(f"preparing findex[{i%2}]")
             findex[i%2] = self.prepare_save(fileh[i%2].fileno(),d,d+t,d+t+n,_frames)
             print(f"prepared findex[{i%2}] = {findex[i%2]}")
-            saved += _frames
-            now = datetime.datetime.now().isoformat("_")
-            self.start_save()
-            if i > 0:
-                print(f"waiting for findex[{1-i%2}] = {findex[1-i%2]}")
-                self.wait_for_save(findex[1-i%2])
-                fileh[1-i%2].close()
-                todel = []
-                for tid,file_cb in self.file_cbs.items():
-                    try:
-                        file_cb({
-                            "prefix": self._prefix,
-                            "stream": self._streamName,
-                            "timestamp": now,
-                            "filepath": fname
-                        })
-                    except Exception as e:
-                        print(e)
-                        todel.append(tid)
-                for tid in todel:
-                    self.file_cbs.pop(tid)
-        self.wait_for_save(findex[i%2])
-        fileh[i%2].close()
+            yield fileh[1-i%2], findex[1-i%2], fnames[1-i%2]
+    
+        yield fileh[i%2], findex[i%2], fnames[i%2]
+
+    def prepareNpySave(self, fpath, frames, datetime=None, overwrite=False, fname_suffix=""):
+        assert frames!=0
+        FRAMES_PER_CHUNK = self.FRAMES_PER_CHUNK
+        self._temp_start()
+        requested_frames = frames
+        if datetime is None: datetime = get_datetime_stamp(microseconds=True)
+        fpath = Path(fpath)/f"{self.streamName}-{datetime}{fname_suffix}"
+        framesperfile = int(MAX_FILE_SIZE/(self.getSize()*self.getDataType().itemsize))
+        framesperfile = (framesperfile//FRAMES_PER_CHUNK)*FRAMES_PER_CHUNK
+        frames = (frames//FRAMES_PER_CHUNK+2)*FRAMES_PER_CHUNK
+        print("Frames per file = ",framesperfile)
+        wholefiles = frames//framesperfile
+        print(f"wholefiles = {wholefiles}")
+        remainder = frames%framesperfile
+        print(f"remainder = {remainder}")
+
+        def make_npy(a,b,c,frames,overwrite):
+            print("Doing make_npy with ",a,b,c,frames,overwrite)
+            global make_npy
+            return make_npy(a,b,c,frames,overwrite=overwrite)
+
+        fileh = [None,None]
+        findex = [None,None]
+        fnames = [None,None]
+        
+        size = self.getSize()
+        
+        print(f"size = {size}")
+        print(f"self.getSize() = {self.getSize()}")
+        print(f"self.getDataType().itemsize = {self.getDataType().itemsize}")
+        print(f"self.getFrameSize() = {self.getFrameSize()}")
+        
+        if size*self.getDataType().itemsize != self.getDataSize():
+            size = self.getDataSize()//self.getDataType().itemsize
+            print(f"size was {self.getSize()} and is now {size}")
+        
+        # do the first file
+        _frames = framesperfile if wholefiles>0 else remainder
+        fname = fpath.with_name(fpath.name+f"-{0:0>3}")
+        try:
+            fnames[0], d = make_npy(fname, size, self.getDataType(), frames=_frames, overwrite=overwrite)
+        except OSError as e:
+            self.cancel_save()
+            raise FileExistsError(str(e))
+        fileh[0] = open(fnames[0], mode="rb+")
+        print("preparing findex[0]")
+        findex[0] = self.prepare_npy_save(fileh[0].fileno(),d,_frames)
+        print(f"prepared findex[0] = {findex[0]}")
+        i = 0
+
+        # if there is more than one, start preparing the next
+        for i in range(1,wholefiles+1):
+            fname = fpath.with_name(fpath.name+f"-{i:0>3}")
+            if i==wholefiles:
+                _frames = remainder
+            else:
+                _frames = framesperfile
+            try:
+                fnames[i%2] , d = make_npy(fname,size,self.getDataType(),frames=_frames,overwrite=overwrite)
+            except OSError as e:
+                self.cancel_save()
+                raise FileExistsError(str(e))
+            fileh[i%2] = open(fnames[i%2],mode="rb+")
+            print(f"preparing findex[{i%2}]")
+            findex[i%2] = self.prepare_npy_save(fileh[i%2].fileno(),d,_frames)
+            print(f"prepared findex[{i%2}] = {findex[i%2]}")
+            yield fileh[1-i%2], findex[1-i%2], fnames[1-i%2]
+    
+        yield fileh[i%2], findex[i%2], fnames[i%2]
+        
+
+    def waitForSave(self, fileh, findex, fname):
+        print(f"waiting for findex = {findex}")
+        now = get_datetime_stamp(microseconds=True)
+        first_frame = self.wait_for_save(findex)
+        print("first ",first_frame)
+        fileh.close()
+        return
+        todel = []
+        for tid,file_cb in self.file_cbs.items():
+            try:
+                file_cb({
+                    "prefix": self._prefix,
+                    "stream": self._streamName,
+                    "timestamp": now,
+                    "filepath": fname
+                })
+            except Exception as e:
+                print(e)
+                todel.append(tid)
+        for tid in todel:
+            self.file_cbs.pop(tid)
+            
+    def saveFrames_part2(self, preparing, barrier=None, frames=0):
+        fnames = []
+        fileh, findex, fname = next(preparing)
+        self.start_save(barrier)
+        while True:
+            fnames.append(fname)
+            self.waitForSave(fileh, findex, fname)
+            last_fname = fname
+            try:
+                fileh, findex, fname = next(preparing)
+            except StopIteration:
+                break
+            # finally:
+            #     cfits.appendToHeader(last_fname,None,reqframes=frames)
         self._temp_stop()
-        return fpath
+        return fnames
+
+    def saveFrames(self, fpath, frames, datetime=None, overwrite=False, fname_suffix=""):
+        preparing = self.prepareSave(fpath, frames, datetime, overwrite, fname_suffix)
+        return self.saveFrames_part2(preparing,frames=frames)
+
+    def saveNpyFrames(self, fpath, frames, datetime=None, overwrite=False, fname_suffix=""):
+        preparing = self.prepareNpySave(fpath, frames, datetime, overwrite, fname_suffix)
+        return self.saveFrames_part2(preparing,frames=frames)
+
+    # def saveFrames2(self, fpath, frames, datetime=None, overwrite=False, fname_suffix=""):
+    #     self._temp_start()
+    #     if datetime is None: datetime = get_datetime_stamp(microseconds=True)
+    #     fpath = fpath/f"{self.streamName}-{datetime}{fname_suffix}"
+    #     framesperfile = int(MAX_FILE_SIZE/(self.getSize()*self.getDataType().itemsize))
+    #     framesperfile = (framesperfile//FRAMES_PER_CHUNK)*FRAMES_PER_CHUNK
+    #     frames = (frames//FRAMES_PER_CHUNK+2)*FRAMES_PER_CHUNK
+    #     print("Frames per file = ",framesperfile)
+    #     wholefiles = frames//framesperfile
+    #     print(f"wholefiles = {wholefiles}")
+    #     remainder = frames%framesperfile
+    #     print(f"remainder = {remainder}")
+
+    #     def make_cfits(a,b,c,frames,overwrite):
+    #         print("Doing make_cfits with ",a,b,c,frames,overwrite)
+    #         global make_cfits
+    #         return make_cfits(a,b,c,frames,overwrite=overwrite)
+
+    #     fileh = [None,None]
+    #     findex = [None,None]
+    #     saved = 0
+    #     fnames = []
+    #     for i in range(wholefiles+int(remainder>0)):
+    #         fname = fpath.with_name(fpath.name+f"-{i:0>3}")
+    #         if (frames-saved)//framesperfile > 0:
+    #             _frames = framesperfile
+    #         else:
+    #             _frames = (frames-saved)%framesperfile
+    #         try:
+    #             fname , d, t, n = make_cfits(fname,self.getSize(),self.getDataType(),frames=_frames,overwrite=overwrite)
+    #         except OSError as e:
+    #             self.cancel_save()
+    #             raise FileExistsError(str(e))
+    #         fnames.append(fname)
+    #         fileh[i%2] = open(fname,mode="rb+")
+    #         print(f"preparing findex[{i%2}]")
+    #         findex[i%2] = self.prepare_save(fileh[i%2].fileno(),d,d+t,d+t+n,_frames)
+    #         print(f"prepared findex[{i%2}] = {findex[i%2]}")
+    #         saved += _frames
+    #         now = get_datetime_stamp(microseconds=True)
+    #         self.start_save(None)
+    #         if i > 0:
+    #             print(f"waiting for findex[{1-i%2}] = {findex[1-i%2]}")
+    #             self.wait_for_save(findex[1-i%2])
+    #             fileh[1-i%2].close()
+    #             todel = []
+    #             for tid,file_cb in self.file_cbs.items():
+    #                 try:
+    #                     file_cb({
+    #                         "prefix": self._prefix,
+    #                         "stream": self._streamName,
+    #                         "timestamp": now,
+    #                         "filepath": fname
+    #                     })
+    #                 except Exception as e:
+    #                     print(e)
+    #                     todel.append(tid)
+    #             for tid in todel:
+    #                 self.file_cbs.pop(tid)
+    #     self.wait_for_save(findex[i%2])
+    #     fileh[i%2].close()
+    #     self._temp_stop()
+    #     return fnames
         # if wholefiles==0:
         #     pass
         # if remainder==0:
@@ -703,14 +915,17 @@ class TelemetrySystem:
     coreStreamNames = ["rtcCentBuf","rtcFluxBuf","rtcMirrorBuf","rtcStatusBuf","rtcSubLocBuf","rtcTimeBuf"]
     otherStreamNames = ["rtcActuatorBuf","rtcErrorBuf"]
     pxlStreamNames = ["rtcCalPxlBuf","rtcPxlBuf"]
-    def __init__(self,prefix="",connect=1):
+    def __init__(self,prefix="",datetime=None):
+        self.telem_init(prefix, datetime)
+
+    def telem_init(self,prefix="",datetime=None):
         self.telem_logger = getLogger(f"{prefix}.TelemSys")
         self.CircReaders: dict[str,CircReader] = {}
         self.telem_initialised = 0
-        if connect:
-            self.telem_init(prefix)
-
-    def telem_init(self,prefix):
+        if datetime==None: datetime = get_datetime_stamp()
+        self.datestamp, self.timestamp = datetime.split("T")
+        self.setTelemSaveDir(DATA_DIR/"darc")
+    
         def addStream(stream):
             cnt = 5
             while cnt:
@@ -733,6 +948,11 @@ class TelemetrySystem:
             # for stream in self.otherStreamNames:
             #     addStream(stream)
             self.telem_initialised = 1
+            
+    def setTelemSaveDir(self, root_dir):
+        self.telemsavedir:Path = Path(root_dir)/self.datestamp/(self.timestamp+"-"+self.prefix)/"telem"
+        if not self.telemsavedir.is_absolute():
+            self.telemsavedir = get_lark_config().LARK_DIR/"lost"/self.telemsavedir
 
     def startTelemetry(self):
         for stream in self.coreStreamNames:
@@ -775,7 +995,7 @@ class TelemetrySystem:
         if type(stream) in (list,tuple):
             if len(stream) == 1:
                 return self.getStreamBlock(stream[0],Nframes)
-            barrier = CircSync(len(stream))
+            barrier = cCircSync(len(stream))
             retvals = [self.CircReaders[name].prepare_data(Nframes) for name in stream]
             funcs = [self.CircReaders[name].get_data for name in stream]
             args = [(barrier,)]*len(funcs)
@@ -818,6 +1038,7 @@ class TelemetrySystem:
             return self.CircReaders[stream].removeCallback(cb_ind)
 
     def saveContinuously(self, stream, framesPerFile=FRAMES_PER_FILE):
+        self.telemsavedir.mkdir(parents=True, exist_ok=True)
         if type(stream) in (list,tuple):
             pass
         elif type(stream) is str:
@@ -829,11 +1050,35 @@ class TelemetrySystem:
         elif type(stream) is str:
             return self.CircReaders[stream].stopSaving()
 
-    def saveFrames(self, stream, Nframes, file_name, overwrite=0):
+    def saveFrames(self, stream, Nframes, overwrite=False):
+        print("DOING THE CRAZY NEW SAVE FRAMES")
+        self.telemsavedir.mkdir(parents=True, exist_ok=True)
         if type(stream) in (list,tuple):
-            pass
+            if len(stream) == 1:
+                return self.saveFrames(stream[0],Nframes,overwrite=overwrite)
+            print("DOING it with multiple streams")
+            barrier = cCircSync(len(stream))
+            datetime = get_datetime_stamp(microseconds=True)
+            args = [(self.CircReaders[name].prepareSave(self.telemsavedir,Nframes,datetime),barrier) for name in stream]
+            funcs = [self.CircReaders[name].saveFrames_part2 for name in stream]
+            return threadSynchroniser(funcs,args)
         elif type(stream) is str:
-            return self.CircReaders[stream].saveFrames(file_name, Nframes, overwrite)
+            return self.CircReaders[stream].saveFrames(self.telemsavedir, Nframes, overwrite=overwrite)
+    
+    def saveNpyFrames(self, stream, Nframes, overwrite=False):
+        print("DOING THE CRAZY NEW SAVE FRAMES")
+        self.telemsavedir.mkdir(parents=True, exist_ok=True)
+        if type(stream) in (list,tuple):
+            if len(stream) == 1:
+                return self.saveNpyFrames(stream[0],Nframes,overwrite=overwrite)
+            print("DOING it with multiple streams")
+            barrier = cCircSync(len(stream))
+            datetime = get_datetime_stamp(microseconds=True)
+            args = [(self.CircReaders[name].prepareNpySave(self.telemsavedir,Nframes,datetime),barrier) for name in stream]
+            funcs = [self.CircReaders[name].saveFrames_part2 for name in stream]
+            return threadSynchroniser(funcs,args)
+        elif type(stream) is str:
+            return self.CircReaders[stream].saveNpyFrames(self.telemsavedir, Nframes, overwrite=overwrite)
 
     def startStreamPublish(self,stream):
         if type(stream) in (list,tuple):
@@ -891,46 +1136,46 @@ class TelemetrySystem:
     #     else:
     #         self.CircReaders[stream].shape = shape
 
-    def setStreamShape(self,stream,shape=None):
-        if shape is None:
-            if stream == "rtcCentBuf":
-                ncam = self.get("ncam")
-                nsub = self.get("nsub")
-                subapFlag = self.get("subapFlag")
-                vsubs = []
-                ncumsub = 0
-                for k in range(ncam):
-                    vsubs.append(int(subapFlag[ncumsub:ncumsub+nsub[k]].sum()))
-                    ncumsub+=nsub[k]
-                if ncam!=1:
-                    if all(v==vsubs[0] for v in vsubs):
-                        shape = ncam,vsubs[0]*2
-                    else:
-                        print(f"Unable to reshape array to {ncam},{vsubs}")
-                        return 1
-                else:
-                    shape = (vsubs[0]*2,)
-            elif stream in ("rtcPxlBuf","rtcCalPxlBuf"):
-                ncam = self.get("ncam")
-                npxlx = self.get("npxlx")
-                npxly = self.get("npxly")
-                if ncam!=1:
-                    if all(x==npxlx[0] and y==npxly[0] for x,y in zip(npxlx,npxly)):
-                        shape = (ncam,int(npxlx[0]),int(npxly[0]))
-                    else:
-                        print(f"Unable to reshape array to {ncam},{npxlx},{npxly}")
-                        return 1
-                else:
-                    shape = (int(npxlx[0]),int(npxly[0]))
-            elif stream=="rtcSubLocBuf":
-                nsub = int(sum(self.get("nsub")))
-                shape = (nsub,6)
+    # def setStreamShape(self,stream,shape=None):
+    #     if shape is None:
+    #         if stream == "rtcCentBuf":
+    #             ncam = self.get("ncam")
+    #             nsub = self.get("nsub")
+    #             subapFlag = self.get("subapFlag")
+    #             vsubs = []
+    #             ncumsub = 0
+    #             for k in range(ncam):
+    #                 vsubs.append(int(subapFlag[ncumsub:ncumsub+nsub[k]].sum()))
+    #                 ncumsub+=nsub[k]
+    #             if ncam!=1:
+    #                 if all(v==vsubs[0] for v in vsubs):
+    #                     shape = ncam,vsubs[0]*2
+    #                 else:
+    #                     print(f"Unable to reshape array to {ncam},{vsubs}")
+    #                     return 1
+    #             else:
+    #                 shape = (vsubs[0]*2,)
+    #         elif stream in ("rtcPxlBuf","rtcCalPxlBuf"):
+    #             ncam = self.get("ncam")
+    #             npxlx = self.get("npxlx")
+    #             npxly = self.get("npxly")
+    #             if ncam!=1:
+    #                 if all(x==npxlx[0] and y==npxly[0] for x,y in zip(npxlx,npxly)):
+    #                     shape = (ncam,int(npxlx[0]),int(npxly[0]))
+    #                 else:
+    #                     print(f"Unable to reshape array to {ncam},{npxlx},{npxly}")
+    #                     return 1
+    #             else:
+    #                 shape = (int(npxlx[0]),int(npxly[0]))
+    #         elif stream=="rtcSubLocBuf":
+    #             nsub = int(sum(self.get("nsub")))
+    #             shape = (nsub,6)
 
-            else:
-                print("stream can't be reshaped")
+    #         else:
+    #             print("stream can't be reshaped")
 
-            self.setStreamShape(stream, shape) # the recursion is to aid in testing using rpyc
-            # self.CircReaders[stream].shape = shape
-        else:
-            self.CircReaders[stream].shape = shape
+    #         self.setStreamShape(stream, shape) # the recursion is to aid in testing using rpyc
+    #         # self.CircReaders[stream].shape = shape
+    #     else:
+    #         self.CircReaders[stream].shape = shape
 

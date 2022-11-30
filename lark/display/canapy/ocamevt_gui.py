@@ -11,8 +11,8 @@ from PyQt5 import QtGui as QtG
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtWidgets as QtW
 import subprocess
-import datetime
 from lark.darc import FITS
+from lark.utils import get_datetime_stamp
 from collections import deque
 import logging
 import inspect
@@ -225,14 +225,14 @@ class CalibrationWindowBoth(QtW.QWidget):
         evtfps = self.evtfpsbox.value()
         ocamgain = self.ocamgainbox.value()
         evtgain = self.evtgainbox.value()
-        now = datetime.datetime.now()
+        now = get_datetime_stamp()
         text = self.filenamepreview.text().split("\n")[0] + "\n"
         fname = self.saveimstext.text()
         if fname != "":
             fname += "_"
         self.fname = str(self.dir_path / fname)
         self.fname += f"oc{ocamfps}-{ocamgain}evt{evtfps}-{evtgain}_"
-        self.fname += f"{now.year:0>4}-{now.month:0>2}-{now.day:0>2}T{now.hour:0>2}{now.minute:0>2}{now.second:0>2}"
+        self.fname += now
         text += self.fname
         self.filenamepreview.setText(text)
 
@@ -576,8 +576,8 @@ class ControlWindowBoth(QtW.QWidget):
         fname = str(self.saveimstext.text())
         if fname == "":
             fname = "darc_ims"
-        now = datetime.datetime.now()
-        fname += "-{:0>2}{:0>2}{:0>2}".format(now.hour,now.minute,now.second)
+        date_now, time_now = get_datetime_stamp(split=True)
+        fname += "-" + time_now
 
         ims = this_darc.GetStreamBlock("rtcPxlBuf",nim)["rtcPxlBuf"][0]
         print(ims.shape)

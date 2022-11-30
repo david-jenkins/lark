@@ -12,7 +12,6 @@ Options will be added if the buffer doesn't exist.
 This will (eventually) become the sole way to set paramters in DARC.
 '''
 
-import datetime
 from logging import getLogger
 import time
 import rpyc.core.netref
@@ -22,18 +21,25 @@ import numa
 import sys
 from .cbuffer import cParamBuf, BufferError
 import code
+from lark import get_lark_config
 from lark.utils import dictDiff, saveDict, saveDictDiff
 import os
 from pathlib import Path
 from . import check as Checker
 from .interface import copydict
+from lark.utils import get_datetime_stamp
 
-SAVE_DIR = "/tmp/params/"
+PARAM_DIR = get_lark_config().DATA_DIR
 
 no_default = "1h3b4hrb1erbjkerbt"
 
 class ParamBuf(cParamBuf):
-    def __init__(self, prefix, numa=-1):
+    def __init__(self, prefix, numa=-1, datetime=None):
+        self.param_init(prefix,numa,datetime)
+
+    def param_init(self, prefix, numa=-1, datetime=None):
+        assert isinstance(prefix,str)
+        assert isinstance(numa,int)
         self.logger = getLogger(f"{prefix}.ParamBuf")
         self.logger.info(f"Opening cParamBuf for {prefix}")
         try:
@@ -47,8 +53,10 @@ class ParamBuf(cParamBuf):
             self.logger.info(f"Opened cParamBuf for {prefix}")
         self.changes = {}
         self.queued = {}
-        self.ondisk = 0
-        self.savedir = None
+        if datetime==None: datetime = get_datetime_stamp()
+        self.datestamp, self.timestamp = datetime.split("T")
+        self.savedonce = False
+        self.setParamSaveDir(PARAM_DIR/"darc")
         self.numaNodes = 0
         self.numaBuffers = {}
         self.paramcbs = {}
@@ -205,28 +213,33 @@ class ParamBuf(cParamBuf):
         if self.now:
             return self.changes[self.now]
 
-    def switchBuffer(self,wait=0):
-        self.now = datetime.datetime.now().isoformat("_")
-        cParamBuf.switchBuffer(self,wait)
-        self.changes[self.now] = self.queued.copy()
-        self.changes[self.now]["switchTimePy"] = self.now
-        self.changes[self.now]["switchTime"] = self.get("switchTime",default=None)
+    def switchBuffer(self,wait=0,init=False):
+        self.now = get_datetime_stamp(microseconds=True)
+        frameno = cParamBuf.switchBuffer(self, wait)
+        index = f"{self.now}-{frameno}"
+        self.changes[index] = self.queued.copy()
+        self.changes[index]["switchTimePy"] = self.now
+        self.changes[index]["switchTime"] = self.get("switchTime",default=None)
+        self.changes[index]["frameno"] = self.get("frameno",default=None)
         self.queued.clear()
         todel = []
-        for pid,cb in self.paramcbs.items():
+        for pid,callback in self.paramcbs.items():
             try:
-                cb(self.prefix,self.changes[self.now])
+                callback(self.prefix,self.changes[self.now])
             except Exception as e:
                 self.logger.warn(repr(e))
                 todel.append(pid)
         for pid in todel:
             del self.paramcbs[pid]
+        if init:
+            self.changes.clear()
+        return frameno
 
     def openNuma(self):
         self.numaNodes = numa.get_max_node()+1
         self.logger.debug(f"self.numaNodes: {self.numaNodes}")
         for i in range(self.numaNodes):
-            self.numaBuffers[f"numa{i}"] = ParamBuf(self._prefix,i)
+            self.numaBuffers[f"numa{i}"] = ParamBuf(self.prefix,i)
 
     def setNuma(self,values,active=0):
         index = self._inactive
@@ -237,23 +250,24 @@ class ParamBuf(cParamBuf):
 
     def getLabels(self):
         return self.keys()
+        
+    def setParamSaveDir(self, root_dir):
+        self.paramsavedir = Path(root_dir)/self.datestamp/(self.timestamp+"-"+self.prefix)
+        if not self.paramsavedir.is_absolute():
+            self.paramsavedir = get_lark_config().LARK_DIR/"lost"/self.paramsavedir
 
-    def saveParamBuf(self,savedir=None):
-        now = datetime.datetime.now()
-        if self.ondisk == 0:
-            if savedir is not None:
-                self.savedir = savedir
-            if self.savedir is None:
-                self.savedir = SAVE_DIR
-            self.savedir+=f"{self._prefix}-{now.year:2}{now.month:0>2}{now.day:0>2}.params"
-            if not os.path.exists(self.savedir):
-                os.makedirs(self.savedir)
-            path = os.path.join(self.savedir,f"{now.hour:0>2}{now.minute:0>2}{now.second:0>2}-init")
-            self.savedir = saveDict(self._getN(self._getnames()),path)
-            self.ondisk = 1
+    def saveParamBuf(self):
+        now = get_datetime_stamp()
+        if not self.savedonce:
+            self.paramsavedir.mkdir(parents=True, exist_ok=True)
+            this_path = self.paramsavedir/f"{self.prefix}_{self.datestamp}T{self.timestamp}"
+            self.paramsavedir = saveDict(self._getN(self._getnames()), this_path)
+            self.savedonce = True
+            self.saveParamBuf()
         else:
+            print(self.changes)
             if self.changes != {}:
-                saveDictDiff(self.changes,self.savedir)
+                saveDictDiff(self.changes, self.paramsavedir)
                 self.changes.clear()
 
     def addParamCallback(self, paramcb):
@@ -345,9 +359,9 @@ if __name__ == "__main__":
     # print(sorted(p._getnames()))
     # print(p.getMany(p._getnames()))
 
-    print(p._prefix)
+    print(p.prefix)
 
-    p._prefix = "hello"
+    p.prefix = "hello"
 
     # p.save()
     sys.exit()

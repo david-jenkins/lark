@@ -48,7 +48,6 @@ import os
 from typing import Any, Union
 import socket
 import time
-import datetime
 import toml
 import rpyc
 import numpy
@@ -64,12 +63,16 @@ from rpyc.utils.authenticators import AuthenticationError
 from collections import ChainMap
 from threading import Condition
 import builtins
+
+from lark.utils import get_datetime_stamp
 local_print = builtins.print
 remote_print = builtins.print
 
 from rpyc import async_ as asyncfunc
 
-from ..logger import log_to_file, log_to_stdout
+from ..logger import LOG_DIR, log_to_file, log_to_stdout
+
+LARK_DIR = Path(toml.load("/etc/lark.cfg")["LARK_DIR"])
 
 logger = getLogger("rpyc")
 logger.setLevel("DEBUG")
@@ -87,7 +90,7 @@ class RPYCConfig:
 
 RPYC_PORT = 18561
 
-#params can be found in /etc/rpyc.cfg and above dict in that order
+#params can be found in /opt/lark/rpyc.cfg and above dict in that order
 
 def decode(value):
     if isinstance(value,rpyc.BaseNetref) and isinstance(value,dict):
@@ -236,7 +239,7 @@ def get_registry_parameters(reload:bool = False) -> RPYCConfig:
     """
     
     if get_registry_parameters.PARAMS is None or reload:
-        cfg_filepath = "/etc/lark.cfg"
+        cfg_filepath = LARK_DIR/"lark.cfg"
 
         if os.path.exists(cfg_filepath):
             try:
@@ -508,7 +511,7 @@ def larkNameServer():
     default_ip_port = f"{registry.RPYC_IP}:{registry.RPYC_PORT}"
     parser.add_argument("ip_port",default=default_ip_port,nargs='?',type=str,help="format = ip:port")
     parser.add_argument("-mode",dest="mode",default=registry.RPYC_MODE,type=str, help="UDP or TCP")
-    parser.add_argument("-o",dest="output",action="store_true",help="Use to print output to command line, else prints to /var/log/lark/larkNames.log")
+    parser.add_argument("-o",dest="output",action="store_true",help=f"Use to print output to command line, else prints to {LOG_DIR/'larkNames.log'}")
 
     args = parser.parse_args()
 
@@ -546,10 +549,10 @@ def larkNameServer():
             raise e
 
     # if not args.output:
-    #     setup_logger(False,"/var/log/lark/larkNames.log")
+    #     setup_logger(False,LOG_DIR/"larkNames.log")
     # else:
     #     setup_logger(False, None)
-    now = datetime.datetime.now()
+    date_now, time_now = get_datetime_stamp(split=True)
     systemd.daemon.notify('READY=1')
-    logger.info(f"Starting new larkNames at {now.hour:0>2}:{now.minute:0>2} on {now.day:0>2}/{now.month:0>2}/{now.year} :-")
+    logger.info(f"Starting new larkNames at {time_now} on {date_now} :-")
     server.start()

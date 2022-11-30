@@ -23,12 +23,9 @@ larkinstall-venv: build
 larkuninstall-venv:
 	. $(LARK_VENV) && pip uninstall lark
 
-system:
-	test ! -f /etc/lark.cfg || sudo mv /etc/lark.cfg /etc/lark.cfg.old
-	sudo ln -sr conf/lark.cfg /etc/lark.cfg
-	# sudo cp conf/lark.cfg /etc/
-	# sudo chmod g+rw /etc/lark.cfg 
-	sudo mkdir /var/log/lark; sudo chmod -R u+rwX,g+rwX,o+w /var/log/lark
+system: group_dir_setup
+	test -f /etc/lark.cfg && sudo mv /etc/lark.cfg /etc/lark.cfg.old
+	sudo bash -c "echo 'LARK_DIR = \"$(LARK_DIR)\"' > /etc/lark.cfg"
 
 centos75:
 	sudo yum -y install epel-release
@@ -51,7 +48,7 @@ ubuntu1804:
 	sudo apt -y install build-essential gdb lcov pkg-config libbz2-dev libffi-dev libgdbm-dev libgdbm-compat-dev liblzma-dev libncurses5-dev libreadline6-dev libsqlite3-dev libssl-dev lzma lzma-dev tk-dev uuid-dev zlib1g-dev
 	sudo apt -y install zsh git openssh-server libfftw3-3 libfftw3-dev gsl-bin libgsl-dev libnuma-dev python3-distutils python3-numpy python3-dev libczmq-dev libsystemd-dev
 
-fedora:
+fedora34:
 	sudo dnf -y install epel-release
 	sudo dnf -y install openssl11 openssl11-devel openssl-libs openssl11-static
 	sudo dnf -y groupinstall "Development Tools"
@@ -62,8 +59,15 @@ group_dir_setup:
 	sudo groupadd lark || echo "group 'lark' already exists"
 	sudo usermod -a -G lark $(USER)
 	test -d $(LARK_DIR) || sudo mkdir $(LARK_DIR)
-	sudo chgrp -R lark $(LARK_DIR)
 	sudo chmod g+rwxs,a+rwX $(LARK_DIR)
+	test -f $(LARK_DIR)/lark.cfg && sudo mv $(LARK_DIR)/lark.cfg $(LARK_DIR)/lark.cfg.old
+	sudo ln -sr conf/lark.cfg $(LARK_DIR)/lark.cfg
+	# sudo cp conf/lark.cfg $(LARK_DIR)/
+	# sudo chmod g+rw $(LARK_DIR)/lark.cfg
+	test -d $(LARK_DIR)/log || sudo mkdir $(LARK_DIR)/log
+	test -d $(LARK_DIR)/log/lark || sudo mkdir $(LARK_DIR)/log/lark
+	sudo chmod -R u+rwX,g+rwX,o+w $(LARK_DIR)/log
+	sudo chgrp -R lark $(LARK_DIR)
 
 _python_venv: group_dir_setup
 	cd $(LARK_DIR) && /usr/local/bin/python$(SHORT_VER) -m venv $(VENV_NAME)
@@ -112,6 +116,7 @@ python310_c75: _python_c75 _python_venv
 
 clean:
 	rm -rf $(BUILDDIR)
+	rm -rf ./build
 
 # TOPTARGETS := all clean
 

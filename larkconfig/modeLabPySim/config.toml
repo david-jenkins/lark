@@ -1,0 +1,54 @@
+modeName = "modeLabPySim"
+srtcName = "LabPySim"
+prefixes = [ "LgsWF", "PyScoring",]
+
+[dm.0]
+name = "ALPAO"
+darc = "LgsWF"
+nacts = 97
+maxact = 1
+minact = -1
+maxpoke = 0.15
+minpoke = -0.15
+map = "ALPAO_dmmap.npy"
+
+[dm.1]
+name = "ULTTM"
+darc = "LgsWF"
+nacts = 2
+maxact = 1
+minact = -1
+maxpoke = 0.15
+minpoke = -0.15
+
+[dm.2]
+name = "DLTTM"
+darc = "LgsWF"
+nacts = 2
+maxact = 1
+minact = -1
+maxpoke = 0.15
+minpoke = -0.15
+
+[wfs.0]
+name = "LGSPY"
+darc = "LgsWF"
+type = "pyr"
+npx = 40
+npy = 40
+map = "LGSPY_pixelmap.npy"
+
+[wfs.1]
+name = "IRPY"
+darc = "IrWF"
+type = "pyr"
+npx = 40
+npy = 40
+map = "IRPY_pixelmap.npy"
+
+[wfs.2]
+name = "NGSSH"
+darc = "NgsWF"
+type = "sh"
+nsubx = 12
+nsuby = 12

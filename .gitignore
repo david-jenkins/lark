@@ -1,3 +1,9 @@
+
+doc/_build
+doc/source/automodules
+
+*.npy
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

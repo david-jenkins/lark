@@ -19,7 +19,7 @@
 #define MAX_CALLBACKS 10
 #define MAX_FITS_FRAMES 1000
 #define TOPIC_LEN 64
-
+#define FRAMES_PER_CHUNK 10
 /*
 
 The CircSync Class, used to create a shared pthreads barrier to pass to other classes.
@@ -121,6 +121,7 @@ typedef struct file_struct {
     int mmap_size;
     int file_elem;
     int file_count;
+    int file_firstfnum;
     char *file_data;
     double *file_ftim;
     unsigned int *file_fnum;
@@ -132,6 +133,7 @@ typedef struct shm_struct {
     int shmOpen;
     int old_dec;
     int data_size;
+    int nstore;
     double current_ftime;
     unsigned int current_fnumb;
 } shm_struct;
@@ -176,6 +178,11 @@ typedef struct thread_struct {
     // file params
     int file_go;
     int file_index;
+    int buffer_index;
+    void (*save_fn)(void *);
+    char *data_buffer;
+    double *ftim_buffer;
+    unsigned int *fnum_buffer;
     pthread_mutex_t *file_mutex;
     pthread_cond_t *file_cond;
     file_struct fileStruct[2];
@@ -407,7 +414,13 @@ inline int
 callback_data(thread_struct *tstr);
 
 inline int
-save_data(thread_struct *tstr);
+save_each_data(void *arg);
+
+inline int
+save_N_data(void *arg);
+
+inline int
+save_block_data(void *arg);
 
 inline int
 reshape_cb(CircReader *self);

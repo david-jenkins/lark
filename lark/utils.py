@@ -4,7 +4,7 @@ from functools import partialmethod
 import importlib
 import sys
 from collections import ChainMap
-from datetime import datetime
+import datetime
 import os
 import json
 from types import SimpleNamespace
@@ -12,6 +12,7 @@ import toml
 from typing import Any, Dict, List, Tuple, Union
 import numpy
 from pathlib import Path
+from lark import get_lark_config
 from lark.darc import tel
 
 MAX_ARRAY_SIZE = 20
@@ -19,6 +20,27 @@ MAX_ARRAY_SIZE = 20
 MANUAL_MODULES = {}
 
 SERIALIZER = "toml" #  or "json"
+
+DATA_DIR = get_lark_config().DATA_DIR
+    
+def get_datetime_stamp(microseconds=False, split=False) -> Union[str,tuple]:
+    """This function should be used for generating all text timestamps to ensure consistency
+
+    Args:
+        microseconds (bool, optional): Whether to include ms in timestamp. Defaults to False.
+        split (bool, optional): Whether to return date and time seperately. Defaults to False.
+
+    Returns:
+        str or tuple: Returns str timestamp or tuple (date_ts,time_ts) if split==True
+    """
+    if not microseconds:
+        now = datetime.datetime.now().strftime("%Y-%m-%dT%H%M_%S")
+    else:
+        now = datetime.datetime.now().strftime("%Y-%m-%dT%H%M_%S-%f")
+    if not split:
+        return now
+    else:
+        return now.split("T")
 
 def partialclass(cls, *args, **kwargs):
     class PartialClass(cls):
@@ -206,14 +228,14 @@ def saveChainMap(input,path):
         saveDictDiff(input.maps[i],name)
     return name
 
-def saveDict(input,path):
-    now = datetime.now().isoformat("_")
+def saveDict(input, path, extra_info=""):
+    now = get_datetime_stamp(microseconds=True)
     dirpath = Path(path).with_suffix(".dict")
-    fname = dirpath.stem
-    filepath = dirpath/(fname+f".{SERIALIZER}")
+    fname = dirpath.stem+extra_info
+    filepath = dirpath/f"{fname}.{SERIALIZER}"
     if not dirpath.exists():
         dirpath.mkdir(parents=True,mode=0o2777)
-    output = encodeDict(input,fname)
+    output = encodeDict(input, fname)
     print(output["values"])
     print(output["files"])
     output["values"]["__save_timestamp__"] = now
@@ -225,13 +247,13 @@ def saveDict(input,path):
             toml.dump(output["values"], jf)
     return str(dirpath)
 
-def saveDictDiff(input,path,compare=False):
-    now = datetime.now().isoformat("_")
+def saveDictDiff(input, path, compare=False, extra_info=""):
+    now = get_datetime_stamp(microseconds=True)
     dirpath = Path(path)
     if not dirpath.exists():
         raise FileNotFoundError("initial dict doesn't exist")
     cnt = 0
-    fname = dirpath.stem + f"-diff{cnt:0>3}"
+    fname = f"{dirpath.stem}-diff{cnt:0>3}{extra_info}"
     filepath = dirpath/(fname+f".{SERIALIZER}")
     while filepath.exists():
         cnt+=1
@@ -614,25 +636,22 @@ def import_modules(dir_name):
 
 
 def make_data_dirs(name:str, prefixes:list) -> tuple[Path,dict,str]:
-    from lark import config
+    from lark import get_lark_config
+    """This assumes that if an RTC is restarted with the same name during the same second,
+    that the current data should overwritten... i.e. the timestamp for directories only has second resolution
+    This is probably ok as an RTC that runs for less than a second is not that useful...."""
 
-    """This assumes that if an RTC is restarted with the same name during the same minute,
-    that the current data should overwritten... i.e. the timestamp for directories only has minute resolution
-    This is probably ok as an RTC that runs for less than a minute is not that usefull...."""
-
-    dd = Path(config["DATA_DIR"])
-    dd = Path("/home/canapyrtc/temp/DATA_DIR")
+    dd = get_lark_config().DATA_DIR
 
     if not dd.exists():
         dd.mkdir(parents=True,mode=0o2777)
     else:
         os.chmod(dd,0o2775)
 
-    now = datetime.now()
-    datef = f"{now.year}{now.month:0>2}{now.day:0>2}"
-    tstamp = datef+f"_{now.hour:0>2}{now.minute:0>2}"
+    date_now, time_now = get_datetime_stamp(split=True)
+    tstamp = f"{date_now}T{time_now}"
 
-    namedir = dd/datef/f"{name}_{tstamp}"
+    namedir = dd/date_now/f"{name}_{tstamp}"
     if namedir.exists():
         print("WARNING: data directories exist, overwritting")
     else:
@@ -644,7 +663,7 @@ def make_data_dirs(name:str, prefixes:list) -> tuple[Path,dict,str]:
 
     prefix_dirs = {}
     for prefix in prefixes:
-        prefix_dirs[prefix] = dd/datef/f"{prefix}_{tstamp}"
+        prefix_dirs[prefix] = dd/date_now/f"{prefix}_{tstamp}"
         if not prefix_dirs[prefix].exists():
             prefix_dirs[prefix].mkdir(parents=True,mode=0o2777)
         if (dd/prefix).exists():

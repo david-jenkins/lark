@@ -12,7 +12,8 @@ import pickle
 import sys
 import time
 import numpy
-from lark.utils import var_from_file
+from lark.utils import get_datetime_stamp, var_from_file
+from lark.daemon import LarkDaemon
 import numa
 import argparse
 from collections import ChainMap
@@ -104,7 +105,7 @@ class Control(ParamBuf, TelemetrySystem):
         ParamBuf (prefix): [description]
     """
     def __init__(self,prefix,*,options:dict={},hostname=None,params=None):
-        TelemetrySystem.__init__(self, prefix, connect=0)
+        self.datetime = get_datetime_stamp()
         # self.options = ChainMap(options,check.default_options)
         options.update({key:value for key,value in check.default_options.items() if key not in options})
         self.options = options
@@ -121,11 +122,11 @@ class Control(ParamBuf, TelemetrySystem):
         print("CALLED INIT RTC")
         while cnt<10:
             try:
-                ParamBuf.__init__(self,prefix)
+                self.param_init(prefix,datetime=self.datetime)
             except BufferError as e:
                 print("failed to open previous buffer")
                 from . import interface
-                host = interface.connectDaemon(self.hostname)
+                host:LarkDaemon = interface.connectDaemon(self.hostname)
                 host.startdarcmain(prefix,options=None)#self.options)
                 self.startedDarc = 1
                 time.sleep(0.2)
@@ -147,7 +148,7 @@ class Control(ParamBuf, TelemetrySystem):
 
     def connect_telemetry(self):
         if not self.telem_initialised:
-            self.telem_init(self.prefix)
+            self.telem_init(self.prefix,self.datetime)
         # self.startTelemetry()
         # time.sleep(1)
         # self.stopTelemetry()
@@ -171,7 +172,7 @@ class Control(ParamBuf, TelemetrySystem):
         if failed:
             raise Exception("Failed to initialise buffer")
         self.setNuma(numaParams)
-        self.switchBuffer()
+        self.switchBuffer(init=True)
         self.connect_telemetry()
 
     def is_running(self):
@@ -254,6 +255,49 @@ class Control(ParamBuf, TelemetrySystem):
             "dirs":[p.name for p in stuff if p.is_dir()],
             "file":[p.name for p in stuff if not p.is_dir()]
         }
+        
+    def setStreamShape(self,stream,shape=None):
+        if shape is None:
+            if stream == "rtcCentBuf":
+                ncam = self.get("ncam")
+                nsub = self.get("nsub")
+                subapFlag = self.get("subapFlag")
+                vsubs = []
+                ncumsub = 0
+                for k in range(ncam):
+                    vsubs.append(int(subapFlag[ncumsub:ncumsub+nsub[k]].sum()))
+                    ncumsub+=nsub[k]
+                if ncam!=1:
+                    if all(v==vsubs[0] for v in vsubs):
+                        shape = ncam,vsubs[0]*2
+                    else:
+                        print(f"Unable to reshape array to {ncam},{vsubs}")
+                        return 1
+                else:
+                    shape = (vsubs[0]*2,)
+            elif stream in ("rtcPxlBuf","rtcCalPxlBuf"):
+                ncam = self.get("ncam")
+                npxlx = self.get("npxlx")
+                npxly = self.get("npxly")
+                if ncam!=1:
+                    if all(x==npxlx[0] and y==npxly[0] for x,y in zip(npxlx,npxly)):
+                        shape = (ncam,int(npxlx[0]),int(npxly[0]))
+                    else:
+                        print(f"Unable to reshape array to {ncam},{npxlx},{npxly}")
+                        return 1
+                else:
+                    shape = (int(npxlx[0]),int(npxly[0]))
+            elif stream=="rtcSubLocBuf":
+                nsub = int(sum(self.get("nsub")))
+                shape = (nsub,6)
+
+            else:
+                print("stream can't be reshaped")
+
+            self.setStreamShape(stream, shape) # the recursion is to aid in testing using rpyc
+            # self.CircReaders[stream].shape = shape
+        else:
+            self.CircReaders[stream].shape = shape
 
 def main():
     from lark.interface import startControl

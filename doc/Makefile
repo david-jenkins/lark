@@ -13,13 +13,19 @@ help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 apidoc:
-	sphinx-apidoc -f -o ../doc/source/automodules ../lark
+	sphinx-apidoc -f -o ../doc/source/automodules ../lark ../lark/darc
+
+apidoc2:
+	sphinx-apidoc -f -d 2 -e -M -o ../doc/source/automodules ../lark ../lark/darc
 
 clean: Makefile
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 	rm source/automodules/*
 
 .PHONY: help Makefile
+
+all: clean apidoc2 html
+	@ echo "Rebuilt the docs"
 
 # Catch-all target: route all unknown targets to Sphinx using the new
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).

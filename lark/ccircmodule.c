@@ -3,6 +3,8 @@
 /* All other includes and definitions are put here */
 #include "ccircmodule.h"
 
+#define THEFRAME(cb,indx) &(((char*)cb->data)[indx*cb->frameSize])
+
 /*
 
 The CircSync Class, used to create a shared pthreads barrier to pass to other classes.
@@ -213,6 +215,9 @@ inline int free_threadstruct(thread_struct *tstr, int free_data){
     free(tstr->zmqStruct->host);
     free(tstr->zmqStruct->multicast);
     free(tstr->zmqStruct);
+    free(tstr->data_buffer);
+    free(tstr->ftim_buffer);
+    free(tstr->fnum_buffer);
     free(tstr);
     return rt;
 }
@@ -322,6 +327,12 @@ CircStruct_stop_thread(CircStruct *self){
 }
 
 static PyObject *
+CircStruct_getFRAMES_PER_CHUNK(CircStruct *self, void *closure)
+{
+    return PyLong_FromLong(FRAMES_PER_CHUNK);
+}
+
+static PyObject *
 CircStruct_getprefix(CircStruct *self, void *closure)
 {
     return PyUnicode_FromString(self->threadStruct->prefix);
@@ -406,6 +417,12 @@ CircStruct_getsize(CircStruct *self, void *closure)
         return Py_INCREF(Py_None), Py_None;
     }
     
+}
+
+static PyObject *
+CircStruct_getframesize(CircStruct *self, void *closure)
+{
+    return PyLong_FromLong(self->threadStruct->shmStruct->cb->frameSize);
 }
 
 static int
@@ -793,11 +810,24 @@ CircStruct_prepare_save(CircStruct *self, PyObject *args){
         return NULL;
     }
     
+    if (self->threadStruct->data_buffer==NULL) {
+        self->threadStruct->data_buffer = calloc(self->threadStruct->dataSize*FRAMES_PER_CHUNK,sizeof(char));
+        self->threadStruct->buffer_index = 0;
+    }
+    if (self->threadStruct->ftim_buffer==NULL){
+        self->threadStruct->ftim_buffer = calloc(FRAMES_PER_CHUNK,sizeof(double));
+    }
+    if (self->threadStruct->fnum_buffer==NULL){
+        self->threadStruct->fnum_buffer = calloc(FRAMES_PER_CHUNK,sizeof(unsigned int));
+    }
+    
+    self->threadStruct->save_fn = save_N_data;
+
     // printf("ccirc prepare_save got (%d,%d,%d,%d,%d)\n",file_desc,data_off,ftim_off,fnum_off,file_elem);
 
     for (i=0;i<10;i++) {
         fsB = &(self->threadStruct->fileStruct[1-self->threadStruct->file_index]);
-        if (fsB->file_elem == 0) {
+        if (fsB->file_count == fsB->file_elem) {
             break;
         } else {
             printf("Error file already queued for saving, retrying....\n");
@@ -810,6 +840,7 @@ CircStruct_prepare_save(CircStruct *self, PyObject *args){
     
     if (i>=9) {
         printf("fsB->file_elem = %d\n",fsB->file_elem);
+        printf("fsB->file_count = %d\n",fsB->file_count);
         PyErr_SetString(PyExc_RuntimeError, "Error file already queued for saving");
         return NULL;
     }
@@ -828,12 +859,85 @@ CircStruct_prepare_save(CircStruct *self, PyObject *args){
     fsB->file_fnum = (unsigned int *)(&fsB->ptr[fnum_off]);
     fsB->file_elem = file_elem;
     fsB->file_count = 0;
-
+    fsB->file_firstfnum = -1;
     // printf("got (%d,%d,%d,%d,%d)\n",file_desc,data_off,ftim_off,fnum_off,file_elem);
 
     fsA = &(self->threadStruct->fileStruct[self->threadStruct->file_index]);
 
-    if (fsA->file_elem == 0 ) {
+    if (fsA->file_count == fsA->file_elem) {
+        self->threadStruct->file_index = 1-self->threadStruct->file_index;
+        return PyLong_FromLong(self->threadStruct->file_index);
+    }
+
+    return PyLong_FromLong(1-self->threadStruct->file_index);
+}
+
+static PyObject *
+CircStruct_prepare_npy_save(CircStruct *self, PyObject *args){
+
+    debug_print("Running prepare_npy_save..\n");
+    int i;
+
+    int file_desc;
+    long data_off;
+    long ftim_off;
+    long fnum_off;
+    int file_elem;
+    struct stat fprops;
+    file_struct *fsA;
+    file_struct *fsB;
+
+    if (!PyArg_ParseTuple(args, "ili", &file_desc, &data_off, &file_elem)){
+        PyErr_SetString(PyExc_TypeError, "Wrong Args");
+        return NULL;
+    }
+    
+    printf("stream = %s\n",self->threadStruct->streamname);
+    printf("dataSize+32 = %d\n",self->threadStruct->dataSize+32);
+    printf("cb->frameSize = %d\n",self->threadStruct->shmStruct->cb->frameSize);
+    
+    self->threadStruct->save_fn = save_block_data;
+
+    // printf("ccirc prepare_save got (%d,%d,%d,%d,%d)\n",file_desc,data_off,ftim_off,fnum_off,file_elem);
+
+    for (i=0;i<10;i++) {
+        fsB = &(self->threadStruct->fileStruct[1-self->threadStruct->file_index]);
+        if (fsB->file_count == fsB->file_elem) {
+            break;
+        } else {
+            printf("Error file already queued for saving, retrying....\n");
+            struct timespec ts;
+            ts.tv_sec = 0;
+            ts.tv_nsec = 7500000;
+            nanosleep(&ts,NULL);
+        }
+    }
+    
+    if (i>=9) {
+        printf("fsB->file_elem = %d\n",fsB->file_elem);
+        printf("fsB->file_count = %d\n",fsB->file_count);
+        PyErr_SetString(PyExc_RuntimeError, "Error file already queued for saving");
+        return NULL;
+    }
+    
+    fstat(file_desc,&fprops);
+    fsB->ptr = mmap(NULL, fprops.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, file_desc, 0);
+
+    if(fsB->ptr == MAP_FAILED){
+        PyErr_SetString(PyExc_RuntimeError, "mmap Mapping Failed");
+        return NULL;
+    }
+
+    fsB->mmap_size = fprops.st_size;
+    fsB->file_data = &fsB->ptr[data_off];
+    fsB->file_elem = file_elem;
+    fsB->file_count = 0;
+    fsB->file_firstfnum = -1;
+    // printf("got (%d,%d,%d,%d,%d)\n",file_desc,data_off,ftim_off,fnum_off,file_elem);
+
+    fsA = &(self->threadStruct->fileStruct[self->threadStruct->file_index]);
+
+    if (fsA->file_count == fsA->file_elem) {
         self->threadStruct->file_index = 1-self->threadStruct->file_index;
         return PyLong_FromLong(self->threadStruct->file_index);
     }
@@ -869,19 +973,23 @@ CircStruct_cancel_save(CircStruct *self, PyObject *args){
     
 
 static PyObject *
-CircStruct_start_save(CircStruct *self, PyObject *args){
+CircStruct_start_save(CircStruct *self, PyObject *obj){
 
     CircSync *value = NULL;
 
-    if (!PyArg_ParseTuple(args, "|O!", &CircSyncType, &value)){
-        PyErr_SetString(PyExc_TypeError, "Wrong Args");
-        return NULL;
+    if (PyObject_IsInstance(obj, (PyObject *)&CircSyncType)){
+        value = obj;
+    } else if (obj != Py_None) {
+        printf("Wrong arg, ignoring\n");
     }
+    
+    file_struct *fs = &(self->threadStruct->fileStruct[self->threadStruct->file_index]);
 
     Py_BEGIN_ALLOW_THREADS
     if (value) {
         pthread_barrier_wait(value->barrier);
     }
+    fs->file_firstfnum = self->threadStruct->dataHeader[1];
     self->threadStruct->file_go = 1;
     Py_END_ALLOW_THREADS
 
@@ -902,15 +1010,17 @@ CircStruct_wait_for_save(CircStruct *self, PyObject *args){
         PyErr_SetString(PyExc_TypeError,"Wrong Args");
         return NULL;
     }
+    
+    file_struct *fs = &(self->threadStruct->fileStruct[file_index]);
 
     Py_BEGIN_ALLOW_THREADS
     pthread_mutex_lock(self->threadStruct->file_mutex);
-    while(self->threadStruct->fileStruct[file_index].file_elem > 0) {
+    while(fs->file_count < fs->file_elem) {
         pthread_cond_wait(self->threadStruct->file_cond,self->threadStruct->file_mutex);
     }
     pthread_mutex_unlock(self->threadStruct->file_mutex);
     Py_END_ALLOW_THREADS
-    return Py_INCREF(Py_None), Py_None;
+    return PyLong_FromLong(fs->file_firstfnum);
 }
 
 /*
@@ -1042,6 +1152,8 @@ CircSubscriber_setdecimation(CircSubscriber *self, PyObject *value, void *closur
 
 
 static PyGetSetDef CircSubscriber_getsetters[] = {
+    {"FRAMES_PER_CHUNK", (getter) CircStruct_getFRAMES_PER_CHUNK, (setter) CircStruct_cantset,
+     "no. of frames per chunk", NULL},
     {"_prefix", (getter) CircStruct_getprefix, (setter) CircStruct_cantset,
      "prefix", NULL},
     {"_streamName", (getter) CircStruct_getstreamName, (setter) CircStruct_cantset,
@@ -1064,6 +1176,8 @@ static PyGetSetDef CircSubscriber_getsetters[] = {
      "data type", NULL},
     {"_size", (getter) CircStruct_getsize, (setter) CircStruct_cantset,
      "array size", NULL},
+    {"_frame_size", (getter) CircStruct_getframesize, (setter) CircStruct_cantset,
+     "frame size", NULL},
     {"_decimation", (getter) CircStruct_getdecimation, (setter) CircSubscriber_setdecimation,
      "decimation", NULL},
     {"_shape", (getter) CircStruct_getshape, (setter) CircStruct_setshape,
@@ -1189,6 +1303,9 @@ static PyMethodDef CircSubscriber_methods[] = {
     },
     {"cancel_save", (PyCFunction) CircStruct_cancel_save, METH_NOARGS,
      "cancel the save"
+    },
+    {"start_save", (PyCFunction) CircStruct_start_save, METH_O,
+     "Set mmap numpy arrays to copy data into"
     },
     {"wait_for_save", (PyCFunction) CircStruct_wait_for_save, METH_VARARGS,
      "Wait for the file arrays to be filled"
@@ -1372,6 +1489,8 @@ CircReader_setdecimation(CircReader *self, PyObject *value, void *closure)
 }
 
 static PyGetSetDef CircReader_getsetters[] = {
+    {"FRAMES_PER_CHUNK", (getter) CircStruct_getFRAMES_PER_CHUNK, (setter) CircStruct_cantset,
+     "no. of frames per chunk", NULL},
     {"_prefix", (getter) CircStruct_getprefix, (setter) CircStruct_cantset,
      "prefix", NULL},
     {"_streamName", (getter) CircStruct_getstreamName, (setter) CircStruct_cantset,
@@ -1394,6 +1513,8 @@ static PyGetSetDef CircReader_getsetters[] = {
      "data type", NULL},
     {"_size", (getter) CircStruct_getsize, (setter) CircStruct_cantset,
      "array size", NULL},
+    {"_frame_size", (getter) CircStruct_getframesize, (setter) CircStruct_cantset,
+     "frame size", NULL},
     {"_decimation", (getter) CircStruct_getdecimation, (setter) CircReader_setdecimation,
      "decimation", NULL},
     {"_shape", (getter) CircStruct_getshape, (setter) CircStruct_setshape,
@@ -1527,10 +1648,13 @@ static PyMethodDef CircReader_methods[] = {
     {"prepare_save", (PyCFunction) CircStruct_prepare_save, METH_VARARGS,
      "Set mmap numpy arrays to copy data into"
     },
+    {"prepare_npy_save", (PyCFunction) CircStruct_prepare_npy_save, METH_VARARGS,
+     "Set mmap numpy arrays to copy data into"
+    },
     {"cancel_save", (PyCFunction) CircStruct_cancel_save, METH_NOARGS,
      "cancel the save"
     },
-    {"start_save", (PyCFunction) CircStruct_start_save, METH_VARARGS,
+    {"start_save", (PyCFunction) CircStruct_start_save, METH_O,
      "Set mmap numpy arrays to copy data into"
     },
     {"wait_for_save", (PyCFunction) CircStruct_wait_for_save, METH_VARARGS,
@@ -1685,7 +1809,7 @@ reader_thread(void *t_args)
             callback_data(t_struct);
         }
         if (t_struct->file_go) {
-            save_data(t_struct);
+            t_struct->save_fn(t_struct);
         }
         // usleep(1000000);
         cnt=0;
@@ -1720,7 +1844,7 @@ subscriber_thread(void *t_args)
             callback_data(t_struct);
         }
         if (t_struct->file_go) {
-            save_data(t_struct);
+            t_struct->save_fn(t_struct);
         }
         cnt=0;
         // usleep(1000000);
@@ -1743,6 +1867,7 @@ open_shm(thread_struct *tstr)
     // }
     circHeaderUpdated(tstr->shmStruct->cb);
     tstr->shmStruct->old_dec = FREQ(tstr->shmStruct->cb);
+    tstr->shmStruct->nstore = NSTORE(tstr->shmStruct->cb);
     debug_print("setting decimation....\n");
     FREQ(tstr->shmStruct->cb) = tstr->decimation;
     debug_print("/dev/shm%s opened\n",tstr->shmStruct->fullname);
@@ -1974,21 +2099,25 @@ callback_data(thread_struct *tstr){
 }
 
 inline int
-save_data(thread_struct *tstr){
+save_each_data(void *arg){
+    thread_struct *tstr = (thread_struct *)arg;
     int size = tstr->dataSize;
     int count;
     file_struct *fs = &(tstr->fileStruct[tstr->file_index]);
-    if (fs->file_elem > 0) {
+    if (fs->file_count < fs->file_elem) {
         //copy into current index
+        if (fs->file_firstfnum==-1){
+            fs->file_firstfnum=tstr->dataHeader[1];
+        }
         count = fs->file_count;
         // double *ftime_arr = (double *)PyArray_DATA(tstr->file_ftim[tstr->file_index]);
         // unsigned int *fnumb_arr = (unsigned int *)PyArray_DATA(tstr->file_fnum[tstr->file_index]);
-        memcpy(&(fs->file_data[count*size]),tstr->dataHandle,size);
+        memcpy(&(fs->file_data[count*size]), tstr->dataHandle, size);
         fs->file_ftim[count] = ((double *)tstr->dataHeader)[1];
         fs->file_fnum[count] = tstr->dataHeader[1];
-        debug_print("Copying into current index=%d:%d\n",tstr->file_index,count);
+        debug_print("Copying into current index=%d:%d:%d\n",tstr->file_index,count,tstr->dataHeader[1]);
         pthread_mutex_lock(tstr->file_mutex);
-        fs->file_elem--;
+        // fs->file_elem--;
         fs->file_count++;
         pthread_mutex_unlock(tstr->file_mutex);
         return 0;
@@ -2004,7 +2133,7 @@ save_data(thread_struct *tstr){
     // swap the index
     tstr->file_index = 1-tstr->file_index;
     fs = &(tstr->fileStruct[tstr->file_index]);
-    if ((fs->file_elem > 0)) {
+    if (fs->file_count < fs->file_elem) {
         count = fs->file_count;
         // copy into new index
         memcpy(&(fs->file_data[count*size]),tstr->dataHandle,size);
@@ -2012,8 +2141,132 @@ save_data(thread_struct *tstr){
         fs->file_fnum[count] = tstr->dataHeader[1];
         debug_print("Copying into new index=%d\n",1-tstr->file_index);
         pthread_mutex_lock(tstr->file_mutex);
-        fs->file_elem--;
+        // fs->file_elem--;
         fs->file_count++;
+        pthread_mutex_unlock(tstr->file_mutex);
+        return 0;
+    }
+    tstr->file_go=0;
+    return 0;
+}
+
+inline int
+save_N_data(void *arg){
+    thread_struct *tstr = (thread_struct *)arg;
+    int size = tstr->dataSize;
+    
+    // copy from the non-contiguous circ buffer into the contiguous local buffer
+    memcpy(&tstr->data_buffer[size*tstr->buffer_index],tstr->dataHandle,size);
+    tstr->ftim_buffer[tstr->buffer_index] = ((double *)tstr->dataHeader)[1];
+    tstr->fnum_buffer[tstr->buffer_index] = tstr->dataHeader[1];
+    tstr->buffer_index++;
+
+    // if the current index of the circbuf is not a multiple of frames per chunk then return
+    if (tstr->buffer_index<FRAMES_PER_CHUNK){
+        return 0;
+    }
+    
+    debug_print("Filled a block of buffer\n");
+    
+    tstr->buffer_index = 0;
+    
+    int count;
+    file_struct *fs = &(tstr->fileStruct[tstr->file_index]);
+    if (fs->file_count < fs->file_elem) {
+        //copy into current index
+        // if (fs->file_firstfnum==-1){
+        //     fs->file_firstfnum=tstr->dataHeader[1];
+        // }
+        count = fs->file_count;
+        // double *ftime_arr = (double *)PyArray_DATA(tstr->file_ftim[tstr->file_index]);
+        // unsigned int *fnumb_arr = (unsigned int *)PyArray_DATA(tstr->file_fnum[tstr->file_index]);
+        memcpy(&(fs->file_data[count*size]), tstr->data_buffer, FRAMES_PER_CHUNK*size);
+        memcpy(&(fs->file_ftim[count]), tstr->ftim_buffer, FRAMES_PER_CHUNK*sizeof(double));
+        memcpy(&(fs->file_fnum[count]), tstr->fnum_buffer, FRAMES_PER_CHUNK*sizeof(unsigned int));
+        debug_print("Copying into current index=%d:%d:%d:%d\n",tstr->file_index,count,tstr->dataHeader[1],fs->file_elem);
+        pthread_mutex_lock(tstr->file_mutex);
+        // fs->file_elem-=FRAMES_PER_CHUNK;
+        fs->file_count+=FRAMES_PER_CHUNK;
+        pthread_mutex_unlock(tstr->file_mutex);
+        return 0;
+    }
+    //signal that a file is done
+    pthread_cond_signal(tstr->file_cond);
+    debug_print("file is done...\n");
+    int err = munmap(fs->ptr, fs->mmap_size);
+    fs->ptr = NULL;
+    if(err != 0){
+        printf("UnMapping Failed\n");
+    }
+    // swap the index
+    tstr->file_index = 1-tstr->file_index;
+    fs = &(tstr->fileStruct[tstr->file_index]);
+    if (fs->file_count < fs->file_elem) {
+        count = fs->file_count;
+        // copy into new index
+        memcpy(&(fs->file_data[count*size]),tstr->data_buffer,FRAMES_PER_CHUNK*size);
+        memcpy(&(fs->file_ftim[count]),tstr->ftim_buffer,FRAMES_PER_CHUNK*sizeof(double));
+        memcpy(&(fs->file_fnum[count]),tstr->fnum_buffer,FRAMES_PER_CHUNK*sizeof(unsigned int));
+        debug_print("Copying into new index=%d\n",tstr->file_index);
+        pthread_mutex_lock(tstr->file_mutex);
+        // fs->file_elem-=FRAMES_PER_CHUNK;
+        fs->file_count+=FRAMES_PER_CHUNK;
+        pthread_mutex_unlock(tstr->file_mutex);
+        return 0;
+    }
+    tstr->file_go=0;
+    return 0;
+}
+
+inline int
+save_block_data(void *arg){
+    thread_struct *tstr = (thread_struct *)arg;
+    circBuf *cb = tstr->shmStruct->cb;
+    
+    if (cb->lastReceived%FRAMES_PER_CHUNK != 0){
+        return 0;
+    }
+    int start_frame;
+    if (cb->lastReceived>=FRAMES_PER_CHUNK){
+        start_frame = cb->lastReceived-FRAMES_PER_CHUNK;
+    } else{
+        start_frame = NSTORE(cb)-FRAMES_PER_CHUNK;
+    }
+    int size = cb->frameSize;
+    file_struct *fs = &(tstr->fileStruct[tstr->file_index]);
+    if (fs->file_count < fs->file_elem) {
+        //copy into current index
+        // double *ftime_arr = (double *)PyArray_DATA(tstr->file_ftim[tstr->file_index]);
+        // unsigned int *fnumb_arr = (unsigned int *)PyArray_DATA(tstr->file_fnum[tstr->file_index]);
+        memcpy(&(fs->file_data[fs->file_count*size]), THEFRAME(cb,start_frame), FRAMES_PER_CHUNK*size);
+        debug_print("Copying into current index=%d:%d:%d:%d\n",tstr->file_index,fs->file_count,tstr->dataHeader[1],fs->file_elem);
+        pthread_mutex_lock(tstr->file_mutex);
+        // fs->file_elem-=FRAMES_PER_CHUNK;
+        fs->file_count+=FRAMES_PER_CHUNK;
+        pthread_mutex_unlock(tstr->file_mutex);
+        return 0;
+    }
+    //signal that a file is done
+    pthread_cond_signal(tstr->file_cond);
+    debug_print("file is done...\n");
+    int err = munmap(fs->ptr, fs->mmap_size);
+    fs->ptr = NULL;
+    if(err != 0){
+        printf("UnMapping Failed\n");
+    }
+    // swap the index
+    tstr->file_index = 1-tstr->file_index;
+    fs = &(tstr->fileStruct[tstr->file_index]);
+    if (fs->file_count < fs->file_elem) {
+        // copy into new index
+        memcpy(&(fs->file_data[fs->file_count*size]), THEFRAME(cb,start_frame), FRAMES_PER_CHUNK*size);
+        // memcpy(&(fs->file_data[count*size]),tstr->data_buffer,FRAMES_PER_CHUNK*size);
+        // memcpy(&(fs->file_ftim[count]),tstr->ftim_buffer,FRAMES_PER_CHUNK*sizeof(double));
+        // memcpy(&(fs->file_fnum[count]),tstr->fnum_buffer,FRAMES_PER_CHUNK*sizeof(unsigned int));
+        debug_print("Copying into new index=%d\n",tstr->file_index);
+        pthread_mutex_lock(tstr->file_mutex);
+        // fs->file_elem-=FRAMES_PER_CHUNK;
+        fs->file_count+=FRAMES_PER_CHUNK;
         pthread_mutex_unlock(tstr->file_mutex);
         return 0;
     }

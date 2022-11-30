@@ -20,10 +20,11 @@ class BasePlugin:
     defaults = {}
     arg_desc = {}
     _name = None
-    def __init__(self):
+    def __init__(self, parameter_store:dict, result_store:dict):
         self.result = None
+        self.result_store = result_store
         self._temp = {}
-        self._values = {}
+        self._values = parameter_store
         self.go = 1
         self.thread = None
         self.period = 1
@@ -35,13 +36,16 @@ class BasePlugin:
         return self.run(_apply, **kwargs)
 
     def __getitem__(self, name):
-        return self.values[name]
+        if name in self.defaults:
+            return self.values[name]
+        else:
+            raise KeyError
 
     def __setitem__(self, name, value):
         if name in self.defaults:
             self._values[name] = value
         else:
-            self._temp[name]
+            raise KeyError
 
     def run(self, _apply=False, **kwargs):
         self._temp.update(kwargs)
@@ -57,7 +61,7 @@ class BasePlugin:
         self.Finalise()
         if _apply:
             self.Apply()
-        self.store_result(self._name, self.result)
+        self.result_store[self._name] = self.result
         
     def _thread_func(self, _apply):
         while self.go:
@@ -83,7 +87,7 @@ class BasePlugin:
         #     self.thread = None
 
     def Values(self):
-        return {key:value for key,value in self.values.items()}
+        return {key:self.values[key] for key in self.defaults}
 
     def Configure(self, **kwargs: Any):
         self._values.update({key:value for key,value in kwargs.items() if key in self.defaults})
@@ -128,20 +132,6 @@ class BaseService:
     @abstractmethod
     def PLUGINS(self):
         pass
-    
-    @property
-    @abstractmethod
-    def INITIALISED(self):
-        pass
-
-    @property
-    @abstractmethod
-    def RESULTS(self):
-        pass
-
-    @classmethod
-    def store_result(cls,name,result):
-        cls.RESULTS[name] = result
 
     @classmethod
     def register_plugin(cls, name):
@@ -154,25 +144,36 @@ class BaseService:
             if hasattr(plugin_class, "run"):
                 if callable(plugin_class.run):
                     plugin_class._name = name
-                    plugin_class.store_result = cls.store_result
                     cls.PLUGINS[name] = plugin_class
                     print(f"setting self.PLUGINS[{name}] = {plugin_class}")
                     return plugin_class
             raise Exception("A plugin needs a callable run attribute")
         return plugin_wrapper
 
-    def __init__(self, name):
+    def __init__(self, name, parameters={}):
         self.name = name
+        self.initialised = {}
+        self.results = {}
+        self.parameters = parameters
         for key in self.PLUGINS:
             try:
-                iplug = self.PLUGINS[key]()
+                iplug = self.PLUGINS[key](self.parameters, self.results)
             except Exception as e:
                 print(e)
             else:
                 if iplug is not None:
-                    self.INITIALISED[key] = iplug
-                    self.RESULTS[key] = None
-                    self.__setattr__(key, self.INITIALISED[key])
+                    iplug.store_result = self.store_result
+                    self.initialised[key] = iplug
+                    self.results[key] = None
+
+    def __getattr__(self, __name: str) -> Any:
+        try:
+            return self.initialised[__name]
+        except KeyError:
+            return super().__getattr__(__name)
+
+    def store_result(self, name, result):
+        self.results[name] = result
 
     # def __getattr__(self, name):
     #     if name in self.PLUGINS:
@@ -183,27 +184,35 @@ class BaseService:
 
     def getResult(self,name=None):
         if name is not None:
-            return self.RESULTS[name]
+            return self.results[name]
         else:
-            return self.RESULTS
+            return self.results
 
     def getPlugin(self,name=None):
         if name is not None:
-            if name in self.INITIALISED:
-                return self.INITIALISED[name]
+            if name in self.initialised:
+                return self.initialised[name]
             else:
                 raise AttributeError(f"No function called {name}")
         else:
-            return self.INITIALISED
+            return self.initialised
             
-    def Configure(self,**kwargs):
-        for key,value in self.INITIALISED.items():
-            local_kwargs = {name:arg for name,arg in kwargs.items() if name in value.defaults}
-            value.Configure(**local_kwargs)
+    def getParameters(self):
+        return self.parameters
+            
+    def Configure(self, **kwargs):
+        print(kwargs)
+        print(type(kwargs))
+        for key,value in kwargs.items():
+            print(key, type(value))
+        self.parameters.update(kwargs)
+        # for key,value in self.initialised.items():
+        #     local_kwargs = {name:arg for name,arg in kwargs.items() if name in value.defaults}
+        #     value.Configure(**local_kwargs)
     
     def start(self):
         failed = []
-        for key,obj in self.INITIALISED.items():
+        for key,obj in self.initialised.items():
             if obj.begin_on_start:
                 try:
                     obj.start()
@@ -211,10 +220,10 @@ class BaseService:
                     print(e)
                     failed.append(key)
         for key in failed:
-            self.INITIALISED.pop(key)
+            self.initialised.pop(key)
 
     def stop(self):
-        for key,value in self.INITIALISED.items():
+        for key,value in self.initialised.items():
             try:
                 value.stop()
             except Exception as e:

@@ -349,6 +349,7 @@ creepMode=0
 
 control.update({
     "switchRequested":0,#this is the only item in a currently active buffer that can be changed...
+    "itersource":0,#here we decide where the frame number comes from, see setFrameno:3313 in darccore.c (drj 20221125)
     "pause":0,
     "go":1,
     "maxClipped":nacts,

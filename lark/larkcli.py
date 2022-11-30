@@ -34,6 +34,18 @@ def main():
         except ValueError:
             value = args.cmd[2]
         c.set(args.cmd[1],value,switch=1,check=1)
+        
+    elif args.cmd[0] == "set_noswitch":
+        if len(args.cmd) != 3:
+            raise ValueError("wrong number of args for set")
+        try:
+            value = literal_eval(args.cmd[2])
+        except ValueError:
+            value = args.cmd[2]
+        c.set(args.cmd[1],value,switch=0,check=1)
+        
+    elif args.cmd[0] == "switchbuf":
+        print(c.switchBuffer())
 
     elif args.cmd[0] == "stop":
         c.stop()
@@ -56,7 +68,7 @@ def main():
 
     elif args.cmd[0] == "print":
         values = c.getAll()
-        for key,val in value.items():
+        for key,val in values.items():
             print(f"{key} = {val}")
             
     elif args.cmd[0] == "print2":

@@ -13,6 +13,7 @@ Lark is a complementary Python control package for the DARC RTC software.
     :caption: Contents:
 
     introduction
+    quickstart
     progress
     apireference
 

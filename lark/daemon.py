@@ -23,6 +23,28 @@ import signal
 from .interface import ControlClient, RemoteService, startControl, startService
 from lark.configLoader import get_lark_config
 
+def darcstarter(prefix, options=None, nstoreDict={}):
+    if not isinstance(prefix, str):
+        raise TypeError("prefix needs to be a string")
+    prefix.replace(" ", "")
+    try:
+        ParamBuf(prefix)
+    except BufferError as e:
+        plist = ["darcmain", "-i", "-r", f"-s{prefix}"]
+        if options is not None:
+            for key in darcmain_format.keys():
+                if options[key] is not None:
+                    plist.append(darcmain_format[key].format(options[key]))
+        if nstoreDict is not None:
+            for opt,value in nstoreDict.items():
+                plist.extend([darcmain_format["nstoreDict"],opt,f"{value:d}"])
+        try:
+            return subprocess.Popen(plist)
+        except Exception as e:
+            raise RuntimeError(f"Failed to execute {str(plist):s}") from e
+    else:
+        return "darcmain already running with this prefix outside of local control"
+
 def larkstarter(prefix, hostname):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     logger = getLogger(prefix)
@@ -72,29 +94,38 @@ class LarkDaemon:
                 self.logger.warn(txt)
                 return self.notify(txt)
             self.darcmain.pop(prefix)
-        try:
-            ParamBuf(prefix)
-        except BufferError as e:
-            plist = ["darcmain", "-i", "-r", f"-s{prefix}"]
-            if options is not None:
-                for key in darcmain_format.keys():
-                    if options[key] is not None:
-                        plist.append(darcmain_format[key].format(options[key]))
-            if nstoreDict is not None:
-                for opt,value in nstoreDict.items():
-                    plist.extend([darcmain_format["nstoreDict"],opt,f"{value:d}"])
-            try:
-                self.darcmain[prefix] = subprocess.Popen(plist)
-            except Exception as e:
-                raise RuntimeError(f"Failed to execute {str(plist):s}") from e
-            else:
-                txt = f"Started darcmain with prefix {prefix}"
-                self.logger.info(txt)
-                return self.notify(txt)
+        retval = darcstarter(prefix, options, nstoreDict)
+        if isinstance(retval, str):
+            self.logger.info(retval)
+            return self.notify(retval)
         else:
-            txt = "darcmain already running with this prefix outside of python control"
-            self.logger.warn(txt)
+            self.darcmain[prefix] = retval
+            txt = f"Started darcmain with prefix {prefix}"
+            self.logger.info(txt)
             return self.notify(txt)
+        # try:
+        #     ParamBuf(prefix)
+        # except BufferError as e:
+        #     plist = ["darcmain", "-i", "-r", f"-s{prefix}"]
+        #     if options is not None:
+        #         for key in darcmain_format.keys():
+        #             if options[key] is not None:
+        #                 plist.append(darcmain_format[key].format(options[key]))
+        #     if nstoreDict is not None:
+        #         for opt,value in nstoreDict.items():
+        #             plist.extend([darcmain_format["nstoreDict"],opt,f"{value:d}"])
+        #     try:
+        #         self.darcmain[prefix] = subprocess.Popen(plist)
+        #     except Exception as e:
+        #         raise RuntimeError(f"Failed to execute {str(plist):s}") from e
+        #     else:
+        #         txt = f"Started darcmain with prefix {prefix}"
+        #         self.logger.info(txt)
+        #         return self.notify(txt)
+        # else:
+        #     txt = "darcmain already running with this prefix outside of python control"
+        #     self.logger.warn(txt)
+        #     return self.notify(txt)
 
     def stopdarcmain(self, prefix):
         if prefix in self.darcmain:
@@ -317,7 +348,7 @@ class LarkDaemon:
 def startDaemon():
     # from contextlib import redirect_stdout
 
-    # with open("/var/log/lark/daemon.startDaemon.log", 'w') as f:
+    # with open("/opt/lark/log/lark/daemon.startDaemon.log", 'w') as f:
     #     with redirect_stdout(f):
     
     registry = get_registry_parameters()

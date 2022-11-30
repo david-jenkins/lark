@@ -17,6 +17,8 @@ from lark.utils import statusBuf_tostring
 
 import importlib.resources
 
+LOG_DIR = get_lark_config().LOG_DIR
+
 def print_ndarray(arr):
     if sum(arr.shape) > 10:
         return f"ndarray({arr.shape}, dtype={arr.dtype})"
@@ -776,7 +778,7 @@ class RemoteFileFollower(LocalFileFollower):
 
 class LoggerFilePrint(LocalFileFollower):
     def __init__(self, file_name, parent=None):
-        fpath = Path("/var/log/lark")/f"{file_name}"
+        fpath = LOG_DIR/f"{file_name}"
         stripchars = len(fpath.stem)+8
         super().__init__(file_name=fpath,stripchars=stripchars,parent=parent)
 
@@ -835,7 +837,7 @@ class FileDropDown(QtW.QWidget):
         self.fileSelected.emit(str(self.dir/self.dropdown.currentText()))
 
 class LogFileTailer(QtW.QWidget):
-    def __init__(self, host="localhost", dir="/var/log/lark", filter=None, parent=None):
+    def __init__(self, host="localhost", dir=LOG_DIR, filter=None, parent=None):
         super().__init__(parent=parent)
         self.host = host
         self.menu = None
