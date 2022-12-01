@@ -14,7 +14,13 @@ import time
 import numpy
 from lark.utils import get_datetime_stamp, var_from_file
 from lark.daemon import LarkDaemon
-import numa
+try:
+    import numa
+except:
+    print("Numa not available")
+    USENUMA = False
+else:
+    USENUMA = True
 import argparse
 from collections import ChainMap
 import traceback
@@ -138,8 +144,8 @@ class Control(ParamBuf, TelemetrySystem):
             finally:
                 cnt+=1
         if self.options["numaSize"]!=0:#check for numa-aware buffers...
-            if numa.available() == False:
-                raise Exception("Numa specified but not available")
+            if not USENUMA or numa.available() == False:
+                raise Exception("Numa specified but not available, please install with pip install numa")
             self.openNuma()
         if self.options["configfile"] is not None:
             self.configure_from_file(self.options["configfile"])

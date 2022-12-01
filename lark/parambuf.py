@@ -16,7 +16,13 @@ from logging import getLogger
 import time
 import rpyc.core.netref
 import numpy
-import numa
+try:
+    import numa
+except:
+    print("Numa not available")
+    USENUMA = False
+else:
+    USENUMA = True
 # import darc
 import sys
 from .cbuffer import cParamBuf, BufferError
@@ -236,6 +242,8 @@ class ParamBuf(cParamBuf):
         return frameno
 
     def openNuma(self):
+        if not USENUMA:
+            raise Exception("Numa specified but not available, please install with pip install numa")
         self.numaNodes = numa.get_max_node()+1
         self.logger.debug(f"self.numaNodes: {self.numaNodes}")
         for i in range(self.numaNodes):

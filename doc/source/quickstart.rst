@@ -30,7 +30,8 @@ To use lark simply as a client, you can simply install the Python package to a P
 Installing DARC
 ----------------
 
-Get darc from here gitlink, and first install system dependencies using one of the named OS commands eg. ubuntu1804 in the Makefile. The run make install.
+Get darc from here https://github.com/david-jenkins/darc, and first install system dependencies using one of the named OS commands eg. ubuntu1804 in the Makefile.
+Then run make && sudo make install.
 
 Running Lark
 ------------
@@ -42,7 +43,7 @@ There are a number of commands that are installed with lark.
 +========================+=============+============+
 | larkcontrol            | column 2    | column 3   |
 +------------------------+-------------+------------+
-| body row 2             | ...         | ...        |
+| larkmagic              | ...         | ...        |
 +------------------------+-------------+------------+
 
 

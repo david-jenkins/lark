@@ -37,7 +37,10 @@ import argparse
 try:
     import numa
 except:
-    print("python numa library not imported.")
+    print("Numa not available")
+    USENUMA = False
+else:
+    USENUMA = True
 
 
 class Control:
@@ -289,8 +292,8 @@ class Control:
         if self.bufferList==None:
             raise Exception("Failed to initialise RTC")
         if self.numaSize!=0:#check for numa-aware buffers...
-            if numa.available()==False:
-                raise Exception("Numa specified but not available")
+            if not USENUMA or numa.available()==False:
+                raise Exception("Numa specified but not available, please install with pip install numa")
             self.numaNodes=numa.get_max_node()+1
             print("self.numaNodes: %d"%self.numaNodes)
             self.numaBufferList=[]

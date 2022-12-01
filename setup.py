@@ -37,7 +37,6 @@ setuptools.setup(
           'scipy',
           'astropy',
           'toml',
-          'numa',
       ],
     dependency_links=['git+git://github.com/pyqtgraph/pyqtgraph.git@master'],
     entry_points = {

@@ -8,4 +8,5 @@ toml
 inotify
 pyinotify
 watchdog
-numa
+sphinx
+sphinx_rtd_theme
