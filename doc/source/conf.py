@@ -63,3 +63,15 @@ html_theme = 'sphinx_rtd_theme'
 # html_static_path = ['_static']
 
 modindex_common_prefix = ["lark."]
+
+def run_apidoc(_):
+    from sphinx.ext.apidoc import main
+    from pathlib import Path
+    cur_dir = Path(__file__).parent.absolute()
+    module = cur_dir.parent.parent/"lark"
+    output_path = cur_dir/"automodules"
+    exclude_path = module/"darc"
+    main(['-f', '-d', '2', '-e', '-M', '-o', str(output_path), str(module), str(exclude_path)])
+
+def setup(app):
+    app.connect('builder-inited', run_apidoc)
