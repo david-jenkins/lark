@@ -5,8 +5,7 @@ PyQt5
 pyqtgraph
 pyyaml
 toml
-inotify
-pyinotify
-watchdog
+scipy
+astropy
 sphinx
 sphinx_rtd_theme

@@ -1689,8 +1689,8 @@ static PyTypeObject CircReaderType = {
 
 static PyModuleDef ccircmodule = {
     PyModuleDef_HEAD_INIT,
-    .m_name = "telelmetry",
-    .m_doc = "Example module that creates an extension type.",
+    .m_name = "ccirc",
+    .m_doc = "DARC circbuf reader",
     .m_size = -1,
 };
 

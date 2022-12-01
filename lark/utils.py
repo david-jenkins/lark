@@ -635,7 +635,7 @@ def import_modules(dir_name):
             spec.loader.exec_module(foo)
 
 
-def make_data_dirs(name:str, prefixes:list) -> tuple[Path,dict,str]:
+def make_data_dirs(name:str, prefixes:list) -> Tuple[Path,dict,str]:
     from lark import get_lark_config
     """This assumes that if an RTC is restarted with the same name during the same second,
     that the current data should overwritten... i.e. the timestamp for directories only has second resolution
