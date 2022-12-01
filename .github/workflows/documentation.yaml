@@ -33,7 +33,7 @@ jobs:
       - name: Sphinx api-doc
         run: sphinx-apidoc -f -d 2 -e -M -o doc/source/automodules . darc
       - name: Sphinx build
-        run: sphinx-build -M html doc/source _site
+        run: sphinx-build -b html doc/source _site
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
 
