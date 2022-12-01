@@ -247,7 +247,7 @@ def get_registry_parameters(reload:bool = False) -> RPYCConfig:
     if get_registry_parameters.PARAMS is None or reload:
         try:
             LARK_DIR =  Path(toml.load("/etc/lark.cfg")["LARK_DIR"])
-            cfg_filepath = LARK_DIR()/"lark.cfg"
+            cfg_filepath = LARK_DIR/"lark.cfg"
         except FileNotFoundError:
             print("No file at /etc/lark.cfg found, using /tmp/lark as main dir and conf/lark.cfg")
             LARK_DIR = "/tmp/lark"

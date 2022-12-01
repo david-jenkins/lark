@@ -50,7 +50,7 @@ def get_lark_config(reload:bool = False) -> Config:
     """
     try:
         LARK_DIR =  Path(toml.load("/etc/lark.cfg")["LARK_DIR"])
-        cfile = LARK_DIR()/"lark.cfg"
+        cfile = LARK_DIR/"lark.cfg"
     except FileNotFoundError:
         print("No file at /etc/lark.cfg found, using /tmp/lark as main dir and conf/lark.cfg")
         LARK_DIR = "/tmp/lark"
