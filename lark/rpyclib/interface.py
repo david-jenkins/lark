@@ -72,13 +72,13 @@ from rpyc import async_ as asyncfunc
 
 from ..logger import LOG_DIR, log_to_file, log_to_stdout
 
-LARK_DIR = Path(toml.load("/etc/lark.cfg")["LARK_DIR"])
-
 logger = getLogger("rpyc")
 logger.setLevel("DEBUG")
 logger.propagate = False
 log_to_file("rpyc",logger=logger)
 # log_to_stdout(logger,level="DEBUG")
+
+HERE = Path(__file__).parent.parent.parent.resolve()
 
 @dataclass
 class RPYCConfig:
@@ -237,9 +237,15 @@ def get_registry_parameters(reload:bool = False) -> RPYCConfig:
     Returns:
         str,int,str: returns the IP adress, port and mode
     """
-    
+
     if get_registry_parameters.PARAMS is None or reload:
-        cfg_filepath = LARK_DIR/"lark.cfg"
+        try:
+            LARK_DIR =  Path(toml.load("/etc/lark.cfg")["LARK_DIR"])
+            cfg_filepath = LARK_DIR()/"lark.cfg"
+        except FileNotFoundError:
+            print("No file at /etc/lark.cfg found, using /tmp/lark as main dir and conf/lark.cfg")
+            LARK_DIR = "/tmp/lark"
+            cfg_filepath = HERE/"conf"/"lark.cfg"        
 
         if os.path.exists(cfg_filepath):
             try:
