@@ -54,7 +54,13 @@ import numpy
 import types
 import threading
 import argparse
-import systemd.daemon
+try:
+    import systemd.daemon
+except:
+    print("No systemd module, must run manually")
+    USESYSTEMD = False
+else:
+    USESYSTEMD = True
 from pathlib import PurePath, Path, PosixPath
 from rpyc.utils.registry import UDPRegistryServer, TCPRegistryServer, UDPRegistryClient, TCPRegistryClient
 from rpyc.lib import setup_logger, spawn_waitready, spawn
@@ -559,6 +565,6 @@ def larkNameServer():
     # else:
     #     setup_logger(False, None)
     date_now, time_now = get_datetime_stamp(split=True)
-    systemd.daemon.notify('READY=1')
+    if USESYSTEMD: systemd.daemon.notify('READY=1')
     logger.info(f"Starting new larkNames at {time_now} on {date_now} :-")
     server.start()

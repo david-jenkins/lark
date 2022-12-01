@@ -7,7 +7,13 @@ import subprocess
 import sys
 import time
 import lark
-import systemd.daemon
+try:
+    import systemd.daemon
+except:
+    print("No systemd module, must run manually")
+    USESYSTEMD = False
+else:
+    USESYSTEMD = True
 from lark.utils import var_from_text
 
 from .interface import connectClient, connectDaemon, get_registry_parameters, remoteprint
@@ -379,7 +385,7 @@ def startDaemon():
 
     with this_daemon as remote_obj:
         signal.signal(signal.SIGINT, remote_obj.unblock)
-        systemd.daemon.notify('READY=1')
+        if USESYSTEMD: systemd.daemon.notify('READY=1')
         remote_obj.block()
         logger.info(f"Cancelled LarkDaemon server: {name}")
         remote_obj.shutdown()

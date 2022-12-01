@@ -32,7 +32,6 @@ setuptools.setup(
           'PyQt5',
           'pyqtgraph',
           'rpyc',
-          'systemd-python',
           'matplotlib',
           'scipy',
           'astropy',
