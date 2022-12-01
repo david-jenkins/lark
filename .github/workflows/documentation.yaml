@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: pip install sphinx sphinx_rtd_theme
       - name: Sphinx api-doc
-        run: sphinx-apidoc -f -d 2 -e -M -o doc/source/automodules . darc
+        run: sphinx-apidoc -f -d 2 -e -M -o doc/source/automodules lark lark/darc
       - name: Sphinx build
         run: sphinx-build -b html doc/source _site
       - name: Upload artifact
