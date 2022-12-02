@@ -6,7 +6,7 @@
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = ./source
-BUILDDIR      = _build
+BUILDDIR      = ../_site
 
 # Put it first so that "make" without argument is like "make help".
 help:
@@ -20,11 +20,12 @@ apidoc2:
 
 clean: Makefile
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
-	rm source/automodules/*
+	rm -f source/automodules/*
 
 .PHONY: help Makefile
 
-all: clean apidoc2 html
+all: clean
+	@$(SPHINXBUILD) -b html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 	@ echo "Rebuilt the docs"
 
 # Catch-all target: route all unknown targets to Sphinx using the new

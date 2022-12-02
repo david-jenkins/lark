@@ -36,9 +36,18 @@ extensions = ['sphinx.ext.autodoc',
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
-    'sphinx.ext.napoleon',]
+    'sphinx.ext.napoleon',
+    'autoapi.extension']
 
 autosummary_generate = True
+
+autoapi_root = "autoapi"
+autoapi_dirs = ["../../lark"]
+autoapi_type = 'python'
+autoapi_template_dir = '_autoapi_templates'
+autoapi_add_toctree_entry = False
+autoapi_keep_files = True
+autoapi_generate_api_docs = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -54,8 +63,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'lark/darc']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
-# html_theme = 'alabaster'
+html_theme = 'alabaster'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -64,14 +72,22 @@ html_theme = 'sphinx_rtd_theme'
 
 modindex_common_prefix = ["lark."]
 
-def run_apidoc(_):
-    from sphinx.ext.apidoc import main
-    from pathlib import Path
-    cur_dir = Path(__file__).parent.absolute()
-    module = cur_dir.parent.parent/"lark"
-    output_path = cur_dir/"automodules"
-    exclude_path = module/"darc"
-    main(['-f', '-d', '2', '-e', '-M', '-o', str(output_path), str(module), str(exclude_path)])
+html_theme_options = {
+    'logo': '../../system/centos-cfg/lark.png',
+    'github_user': 'david-jenkins',
+    'github_repo': 'lark',
+    'fixed_sidebar': True,
+    'description': "Some Python code for the DARC RTC"
+}
 
-def setup(app):
-    app.connect('builder-inited', run_apidoc)
+# def run_apidoc(_):
+#     from sphinx.ext.apidoc import main
+#     from pathlib import Path
+#     cur_dir = Path(__file__).parent.absolute()
+#     module = cur_dir.parent.parent/"lark"
+#     output_path = cur_dir/"automodules"
+#     exclude_path = module/"darc"
+#     main(['-f', '-d', '2', '-e', '-M', '-o', str(output_path), str(module), str(exclude_path)])
+
+# def setup(app):
+#     app.connect('builder-inited', run_apidoc)

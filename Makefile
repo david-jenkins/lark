@@ -115,8 +115,12 @@ python310_c75: SHORT_VER=3.10
 python310_c75: _python_c75 _python_venv
 
 clean:
+	$(MAKE) -C darc clean
+	$(MAKE) -C doc clean || echo "Sphinx clean failed"
 	rm -rf $(BUILDDIR)
-	rm -rf ./build
+	rm -rf lark/*.so
+	rm -rf lark/darc/*.so
+	rm -rf dist
 
 # TOPTARGETS := all clean
 

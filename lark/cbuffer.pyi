@@ -3,7 +3,7 @@
 defines the api in a Python readable way"""
 
 
-from typing import Any
+from typing import Any, Dict
 
 
 class cParamBuf:
@@ -20,7 +20,7 @@ class cParamBuf:
     def _inactive(self,value:int): """Set the inactive buffer, do a buffer swap if the buffer changes"""
     def __init__(self,prefix:str,numa:int=-1): """Open a CParamBuff with prefix=prefix, if numa is not -1 then it opens numa buffer index=numa"""
     def _get(self,name:str,inactive:int=0) -> Any: """Get a value from the active(inactive if inactive==1) buffer"""
-    def _getN(self,names:list,inactive:int=0) -> dict[str:Any]: """Get values from the active(inactive if inactive==1) buffer"""
+    def _getN(self,names:list,inactive:int=0) -> Dict[str,Any]: """Get values from the active(inactive if inactive==1) buffer"""
     def _set(self): """Set a value in the active buffer, it will block until the buffer is not being used."""
     def _setN(self,name:str,value:Any,active:int=0): """Set a value in the inactive(active if active==1) buffer"""
     def _setToBuf(self,name:str,value:Any,index:int): """Set a value in buffer with index=index"""

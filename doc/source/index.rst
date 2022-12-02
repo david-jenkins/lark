@@ -9,13 +9,14 @@ Welcome to lark's documentation!
 Lark is a complementary Python control package for the DARC RTC software.
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 3
     :caption: Contents:
 
     introduction
     quickstart
     progress
     apireference
+    autoapi
 
 Indices and tables
 ==================

@@ -13,8 +13,6 @@ This will (eventually) become the sole way to set paramters in DARC.
 '''
 
 from logging import getLogger
-import time
-import rpyc.core.netref
 import numpy
 try:
     import numa
@@ -25,7 +23,7 @@ else:
     USENUMA = True
 # import darc
 import sys
-from .cbuffer import cParamBuf, BufferError
+from lark.cbuffer import cParamBuf, BufferError
 import code
 from lark import get_lark_config
 from lark.utils import dictDiff, saveDict, saveDictDiff

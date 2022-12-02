@@ -1,6 +1,6 @@
 _site
 doc/_build
-doc/source/automodules
+doc/source/autoapi
 
 *.npy
 

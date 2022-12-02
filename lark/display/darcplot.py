@@ -20,7 +20,6 @@ from functools import reduce
 if "OS" in os.environ and os.environ["OS"]=="Windows_NT":
     devshm="c:/RTC/shm/"
 else:
-    import serialise
     devshm="/dev/shm/"
 
 
@@ -45,9 +44,9 @@ from PyQt5 import QtWidgets as QtW
 import sys
 import subprocess
 import threading
-import serialise
+import lark.darc.serialise
 import socket
-import plotxml
+import lark.darc.plotxml
 import select
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler

@@ -8,4 +8,5 @@ toml
 scipy
 astropy
 sphinx
-sphinx_rtd_theme
+sphinx-autoapi
+watchdog

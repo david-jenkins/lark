@@ -16,4 +16,5 @@ install:
 	sudo cp src/mutex.o $(DARCDIR)/lib
 
 clean:
+	rm -rf lib
 	$(MAKE) -C src clean
