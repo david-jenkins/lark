@@ -7,6 +7,4 @@ pyyaml
 toml
 scipy
 astropy
-sphinx
-sphinx-autoapi
 watchdog

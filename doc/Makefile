@@ -20,7 +20,7 @@ apidoc2:
 
 clean: Makefile
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
-	rm -f source/automodules/*
+	rm -rf source/autoapi
 
 .PHONY: help Makefile
 
