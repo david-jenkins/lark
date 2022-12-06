@@ -19,6 +19,7 @@ host = "LASERLAB"
 # prefix: (config_file, hostname)
 darcs = {
     "LgsWF" : ("darc/configLGSWF.py",host),
+    "NgsWF" : ("darc/configNGSWF.py",host),
     "PyScoring" : ("darc/configPyScoring.py",host),
 }
 
@@ -27,18 +28,22 @@ darcs = {
 # this then extracts the service class via the class_name and starts it remotely
 # this is needed because it's not easy/not possible to pickle a class definition
 services = {
-    "LabPyTestSRTC": ("CanapySrtc","modeLabPyTest/srtc.py",host),
+    "LabPySHTestSRTC": ("CanapySrtc","modeLabPySHTest/srtc.py",host),
     "LgsWFiPortSRTC": ("iPortService","modeLabPyTest/iport.py",host),
-    "LabPyTestDiagSRTC": ("CanapyDiagnostics","modeLabPyTest/tests.py",host)
+    "NgsWFiPortSRTC": ("iPortService","modeLabPyTest/iport.py",host),
+    "LabPySHTestDiagSRTC": ("CanapyDiagnostics","modeLabPyTest/tests.py",host)
 }
 
 services_config = {
     "LgsWFiPortSRTC": {
         "prefix":"LgsWf", "localip":"169.254.24.100", "iportip":"169.254.24.101"
+    },
+    "NgsWFiPortSRTC": {
+        "prefix":"NgsWf", "localip":"169.254.24.100", "iportip":"169.254.24.102"
     }
 }
 
-GUI = ("CanapyGUI", "modeLabPyTest/gui.py")
+GUI = ("CanapyGUI", "modeLabPySHTest/gui.py")
 
 info = """Used for the calibration and testing of the OCAM PyWFS in the OAR Lab.
 Also uses the EVT scoring camera."""

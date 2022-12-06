@@ -138,12 +138,32 @@ LGSPY_pixelmap = numpy.array(
 
 IRPY_pixelmap = LGSPY_pixelmap
 
-answer = input(f"Are you sure you want to overwrite config files in {HERE}? (yes/no)\n")
+arrays = {
+    "ALPAO_dmmap.npy":ALPAO_dmmap,
+    "LGSPY_pixelmap.npy":LGSPY_pixelmap,
+    "IRPY_pixelmap.npy":IRPY_pixelmap
+}
 
-if 'yes' in answer:
-    numpy.save(HERE/"ALPAO_dmmap.npy", ALPAO_dmmap)
-    numpy.save(HERE/"LGSPY_pixelmap.npy", LGSPY_pixelmap)
-    numpy.save(HERE/"IRPY_pixelmap.npy", IRPY_pixelmap)
 
-    with (HERE/"config.toml").open("w") as tf:
-        toml.dump(config, tf)
+def save_toml():
+     with (HERE/"config.toml").open("w") as tf:
+            toml.dump(config, tf)
+
+def save_file(name):
+    numpy.save(HERE/name, arrays[name])
+
+def main(force=False):
+    if not force:
+        answer = input(f"Are you sure you want to overwrite config files in {HERE}? (yes/no)\n")
+    else:
+        answer = "yes"
+
+    if 'yes' in answer:
+        save_file("ALPAO_dmmap.npy")
+        save_file("LGSPY_pixelmap.npy")
+        save_file("IRPY_pixelmap.npy")
+
+        save_toml()
+            
+if __name__ == "__main__":
+    main()

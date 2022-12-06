@@ -29,14 +29,6 @@ import time
 import os
 from lark.utils import generatePyrParams, make_cog_centIndexArray
 
-
-ncents:int
-nsuby:numpy.ndarray
-camAffin:numpy.ndarray
-mirAffin:numpy.ndarray
-refCentroids:numpy.ndarray
-pxlCnt:numpy.ndarray
-
 delay = 0#10000#10000
 
 control = {}
@@ -64,7 +56,7 @@ threadPriority = 50*numpy.ones((nthreads+1,),dtype=numpy.uint32)
 
 # the thread 
 start_thread = 2
-# start_thread = 10
+start_thread = 10
 
 keys,(camAffin,
 mirAffin,
@@ -248,7 +240,7 @@ flatField = None#FITS.Read("shimgb1stripped_ff.fits")[1].astype("f")
 camerasOpen = 1
 
 #camList = ["Pleora Technologies Inc.-iPORT-CL-Ten-Full--OCAM1","EVT-HB-1800SM-640002-ESO"][:ncam]
-camList = ["Pleora Technologies Inc.-iPORT-CL-Ten-Full--OCAM1"][:ncam]
+camList = ["Pleora Technologies Inc.-iPORT-CL-Ten-Full--OCAM2"][:ncam]
 # camList = ["Pleora Technologies Inc.-iPORT-CL-Ten-Full--OCAM1"][:ncam]
 camNames=";".join(camList)#"Imperx, inc.-110323;Imperx, inc.-110324"
 print(camNames)
@@ -365,7 +357,6 @@ creepMode=0
 
 control.update({
     "switchRequested":0,#this is the only item in a currently active buffer that can be changed...
-    "itersource":0,#here we decide where the frame number comes from, see setFrameno:3313 in darccore.c (drj 20221125)
     "pause":0,
     "go":1,
     "maxClipped":nacts,

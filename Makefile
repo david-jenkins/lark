@@ -60,7 +60,7 @@ group_dir_setup:
 	sudo usermod -a -G lark $(USER)
 	test -d $(LARK_DIR) || sudo mkdir $(LARK_DIR)
 	sudo chmod g+rwxs,a+rwX $(LARK_DIR)
-	test -f $(LARK_DIR)/lark.cfg && sudo mv $(LARK_DIR)/lark.cfg $(LARK_DIR)/lark.cfg.old
+	test ! -f $(LARK_DIR)/lark.cfg || sudo mv $(LARK_DIR)/lark.cfg $(LARK_DIR)/lark.cfg.old
 	sudo ln -sr conf/lark.cfg $(LARK_DIR)/lark.cfg
 	# sudo cp conf/lark.cfg $(LARK_DIR)/
 	# sudo chmod g+rw $(LARK_DIR)/lark.cfg

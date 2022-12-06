@@ -8,6 +8,7 @@ using this script.
 import numpy
 import toml
 import lark
+from lark.utils import var_from_file
 from lark.utils import get_datetime_stamp
 from pathlib import Path
 
@@ -35,12 +36,20 @@ services = {
     "LgsWFiPortSRTC": ("iPortService","modeLabPySim/iport.py",host)
 }
 
-srtc_config = toml.load(mode_path/"config.toml")
+try:
+    srtc_config = toml.load(mode_path/"config.toml")
+except FileNotFoundError:
+    var_from_file("save_toml",mode_path/'config.py')()
+    srtc_config = toml.load(mode_path/"config.toml")
 
 def replace_filenames(srtc_config):
     for key,value in srtc_config.items():
         if isinstance(value,str) and ".npy" in value:
-            srtc_config[key] = numpy.load(mode_path/value)
+            try:
+                srtc_config[key] = numpy.load(mode_path/value)
+            except:
+                var_from_file("save_file",mode_path/'config.py')(value)
+                srtc_config[key] = numpy.load(mode_path/value)
         elif isinstance(value,dict):
             srtc_config[key] = replace_filenames(value)
     return srtc_config
@@ -58,7 +67,6 @@ info = """Used for the simulation of the calibration and testing of the OCAM PyW
 def startlark():
     """A helper function to start the darcs and configure them with the parameters
     """
-    from lark.utils import var_from_file
     from lark.interface import startControlClient
 
     print("starting larks")

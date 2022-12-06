@@ -30,13 +30,8 @@ def gen_threadParams(nthreads,ncam,start_thread):
     threadAffinity[threadAffElSize:] = threadAffinity[:-threadAffElSize]
     threadAffinity[:threadAffElSize] = 0
     threadAffinity[0] = 1<<start_thread # control thread affinity 3
-
-    return {
-        "camAffin":camAffin,
-        "mirAffin":mirAffin,
-        "threadAffElSize":threadAffElSize,
-        "threadAffinity":threadAffinity
-    }
+    names = ("camAffin","mirAffin","threadAffElSize","threadAffinity")
+    return names,(camAffin,mirAffin,threadAffElSize,threadAffinity)
     
     
 def gen_subapParams(nsubx,nthreads,npxlx,npxly,ncam,pyramidMode,xoff,yoff,xsep,ysep):
@@ -111,7 +106,7 @@ def gen_subapParams(nsubx,nthreads,npxlx,npxly,ncam,pyramidMode,xoff,yoff,xsep,y
                     n=(subapLocation[indx,1]-1)*npxlx[k]+subapLocation[indx,4]
                     pxlCnt[indx]=n
                     subapAllocation[i*nsubx[k]+j]=i%nthreads
-    pxlCnt[-3] = npxlx[0]*npxly[0]
+    pxlCnt[numpy.where(subapFlag==1)[-1]] = npxlx[0]*npxly[0]
     
     centIndexSize = 2  # 1<=(value)<=4
     centIndexArray = numpy.zeros((npxls,centIndexSize),numpy.float32)
@@ -130,21 +125,34 @@ def gen_subapParams(nsubx,nthreads,npxlx,npxly,ncam,pyramidMode,xoff,yoff,xsep,y
             # cia[:,:,2:] = 1
         else:
             cia[:,:,:] = make_cog_centIndexArray(npxlx[cam],npxly[cam],subapLocation[nnsub[cam]:,:])[:,:,:centIndexSize]
-    
-    return {
-        "nsub":nsubx*nsuby,
-        "nsubx":nsubx,
-        "nsuby":nsuby,
-        "nsubaps":nsubaps,
-        "subapFlag":subapFlag,
-        "ncents":ncents,
-        "subapLocation":subapLocation,
-        "pxlCnt":pxlCnt,
-        "subapAllocation":subapAllocation,
-        "centIndexArray":centIndexArray,
-        "refCentroids":numpy.zeros(ncents,dtype=numpy.float32),
-        "pupilPos":numpy.array([xoff,yoff,xsep,ysep],dtype=numpy.int32),
-    }
+    nsub = nsubx*nsuby
+    refCentroids = numpy.zeros(ncents,dtype=numpy.float32)
+    pupilPos = numpy.array([xoff,yoff,xsep,ysep],dtype=numpy.int32)
+    names = ("nsub",
+        "nsubx",
+        "nsuby",
+        "nsubaps",
+        "subapFlag",
+        "ncents",
+        "subapLocation",
+        "pxlCnt",
+        "subapAllocation",
+        "centIndexArray",
+        "refCentroids",
+        "pupilPos")
+    return names,(
+        nsub,
+        nsubx,
+        nsuby,
+        nsubaps,
+        subapFlag,
+        ncents,
+        subapLocation,
+        pxlCnt,
+        subapAllocation,
+        centIndexArray,
+        refCentroids,
+        pupilPos)
     
     
 # def gen_camParams(camera_name,framerate,ocam_windowed=False):
