@@ -1,4 +1,10 @@
+"""
+A graphical python code to investigate the optimal duty cycle of the CaNaPy laser pulse
+"""
+
+
 import sys
+from typing import Any
 from PyQt5 import QtWidgets as QtW
 from PyQt5 import QtCore as QtC
 from PyQt5 import QtGui as QtG
@@ -7,40 +13,49 @@ pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 import numpy
 
-PHOTONS_PER_S_PER_M2_PER_WATT = PSM2W = 600000.0
-DUTY33_INT_TIME_MUS = 57.0
+SANITY = 0 # a sanity check, if 1 then uses top hat functions to verify the math
 
-MEANNAALT = 91
+PHOTONS_PER_S_PER_M2_PER_WATT = PSM2W = 600000.0 # photons per second per square meter per watt from Na return
+DUTY33_INT_TIME_MUS = 57.0 # a constant of previous best pulse time in ms for a 33% duty cycle
 
-D = 1.0
-c_m = 299705000
-l = 1000
-t = 0.000001
-c = c_m*t/l
+MEANNAALT = 91 # the mean Na altitude
 
-km_per_step = 2
-time_per_step = km_per_step/c
-sanity = 0
-pi = numpy.pi
-power = 70
-elevation = 2.39
+D = 1.0 # primary mirror diameter
+c_m = 299705000 # c in meters and seconds
+LU = 1000 # our length unit, km
+TU = 0.000001 # our time unit, mus
+C = c_m*TU/LU # c scaled to our units
+
+KM_PER_STEP = 2 # how many km to traverse per step
+MUS_PER_STEP = KM_PER_STEP/C # in time units
+PI = numpy.pi # pie
+POWER = 70 # laser power
+TEIDE_KM = 2.39 # elevation of the observatory at Teide
 
 def NA_photon_return(distance, deltaT):
-    A = power*PSM2W*deltaT*(10**(-6))*(pi*(D/2)**2)*(MEANNAALT-elevation)**2
+    """
+    Using the PSM2W value provided to me, calculate the photon return at the telescope
+    """
+    A = POWER*PSM2W*deltaT*TU*(PI*(D/2)**2)*(MEANNAALT-TEIDE_KM)**2
     return A*distance**(-2)
 
 def calc_dist(alt, angle):
-    rad_m = 6375783.316
-    rad = rad_m/l
-    elev = elevation
+    """
+    Caluclate the distance to a layer of a specific altitude looking along a specific angle.
+    e.g. you are looking 30deg down and want to know the distance to a 90km Na layer.
+    uses this https://mathworld.wolfram.com/Circle-LineIntersection.html
+    """
+    rad_m = 6375783.316 # radius of the earth in m
+    rad = rad_m/LU # earth radius converted to our units
+    elev = TEIDE_KM
     hyp = 1000
     
     angle = 90-angle
     
-    r = alt+rad-elev
+    r = rad+alt
     
     x1 = 0
-    y1 = rad
+    y1 = rad+elev
     x2 = numpy.cos(angle*numpy.pi/180.)*hyp
     y2 = y1+numpy.sin(angle*numpy.pi/180.)*hyp
     
@@ -50,131 +65,61 @@ def calc_dist(alt, angle):
     D = x1*y2-x2*y1
     dr = numpy.sqrt(dx**2+dy**2)
     
-    xi1 = (D*dy+dx*numpy.sqrt((r**2)*(dr**2)-D**2))/dr**2
-    xi2 = (D*dy-dx*numpy.sqrt((r**2)*(dr**2)-D**2))/dr**2
-    yi1 = (-D*dx+dy*numpy.sqrt((r**2)*(dr**2)-D**2))/dr**2
-    yi2 = (-D*dx-dy*numpy.sqrt((r**2)*(dr**2)-D**2))/dr**2
+    _sqrt = numpy.sqrt((r**2)*(dr**2)-D**2)
     
-    return numpy.sqrt(xi1**2+(yi1-y1)**2)
+    xi1 = (D*dy+dx*_sqrt)/dr**2
+    xi2 = (D*dy-dx*_sqrt)/dr**2
+    yi1 = (-D*dx+dy*_sqrt)/dr**2
+    yi2 = (-D*dx-dy*_sqrt)/dr**2
+    
+    d1 = numpy.sqrt(xi1**2+(yi1-y1)**2)
+    d2 = numpy.sqrt(xi2**2+(yi2-y1)**2)
+    
+    return d1 if d1<d2 else d2
     
 def gaussian(x, mu, sig):
+    """
+    Generate a basic gaussian
+    """
     return numpy.exp(-numpy.power(x - mu, 2.) / (2 * numpy.power(sig, 2.)))/numpy.sqrt(2*numpy.pi*numpy.power(sig, 2.))
 
 
-def rayleigh(alt, offset=0, stretch=1):
+def D_return(alt, offset=0, stretch=1):
+    """
+    A function Domenico gave me to calculate return flux from scattering
+    """
     x = 1000*(alt-offset)/stretch # convert from km and transform
-    return (2.551555e-13*numpy.power(x,3)-1.688837e-8*numpy.power(x,2)+3.567613e-4*x-2.406285)*power 
+    return (2.551555e-13*numpy.power(x,3)-1.688837e-8*numpy.power(x,2)+3.567613e-4*x-2.406285)*POWER 
 
 class Sim():
+    """The main Simulation class, holds parameters and has methods.
+    Unless otherwise stated, all length and time units follow LU and TU defined above
+    """
+    updating_attrs = ()
     def __init__(self):
-        self._pulse = 50
-        self._exposure = 500
-        self._pulse_per_exposure = 4
-        self._angle = 30
-        self._duty = 33.333333
+        self.pulse = 50 # pulse length value
+        self.exposure = 500 # exposure length value
+        self.pulse_per_exposure = 4 # how many pulses per each exposure time
+        self.angle = 30 # altitude angle value
+        self.duty = 33.333333 # duty cycle value
 
-        self._na_alt = 91
-        self._na_thick = 15
-        self._ra_alt = 25
-        self._overlap = 0
+        self.na_alt = 91
+        self.na_thick = 15
+        self.ra_alt = 25
+        self.overlap = 0
         
-        self.calc_pulse = True
-        self.calc_exposure = True
+        self.auto_pulse = True
+        self.auto_exposure = True
         
         self.cbs = []
         
         self.update()
+        self.updating_attrs = ("pulse","exposure","pulse_per_exposure","angle","duty","na_alt","na_thick","ra_alt","overlap","auto_pulse","auto_exposure")
         
-    @property
-    def pulse(self):
-        return self._pulse
-        
-    @pulse.setter
-    def pulse(self,value):
-        self._pulse = value
-        self.update()
-        
-    @property
-    def angle(self):
-        return self._angle
-        
-    @angle.setter
-    def angle(self,value):
-        self._angle = value
-        self.update()
-        
-    @property
-    def duty(self):
-        return self._duty
-        
-    @duty.setter
-    def duty(self,value):
-        self._duty = value
-        self.update()
-        
-    @property
-    def na_alt(self):
-        return self._na_alt
-        
-    @na_alt.setter
-    def na_alt(self,value):
-        self._na_alt = value
-        self.update()
-        
-    @property
-    def na_thick(self):
-        return self._na_thick
-        
-    @na_thick.setter
-    def na_thick(self,value):
-        self._na_thick = value
-        self.update()
-        
-    @property
-    def ra_alt(self):
-        return self._ra_alt
-        
-    @ra_alt.setter
-    def ra_alt(self,value):
-        self._ra_alt = value
-        self.update()
-        
-    @property
-    def overlap(self):
-        return self._overlap
-        
-    @overlap.setter
-    def overlap(self,value):
-        self._overlap = value
-        self.update()
-        
-    @property
-    def exposure(self):
-        return self._exposure
-        
-    @exposure.setter
-    def exposure(self, value):
-        self._exposure = value
-        self.update()
-        
-    @property
-    def pulse_per_exposure(self):
-        return self._pulse_per_exposure
-        
-    @pulse_per_exposure.setter
-    def pulse_per_exposure(self, value):
-        self._pulse_per_exposure = value
-        self.update()
-        
-    def autoPulse(self, onoff:bool):
-        print(f"Auto pulse = {onoff}")
-        self.calc_pulse = onoff
-        self.update()
-
-    def autoExposure(self, onoff:bool):
-        print(f"Auto expose = {onoff}")
-        self.calc_exposure = onoff
-        self.update()
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        super().__setattr__(__name,__value)
+        if __name in self.updating_attrs:
+            self.update()
 
     def update(self):
         na_alt_1 = self.na_alt-self.na_thick/2.
@@ -189,10 +134,10 @@ class Sim():
         
         self.ratio = duty_1-1
         
-        if self.calc_pulse:
-            self._pulse = (2/((self.ratio+self.overlap)*c))*(self.na_dist_2-self.na_dist_1)
+        if self.auto_pulse:
+            self._pulse = (2/((self.ratio+self.overlap)*C))*(self.na_dist_2-self.na_dist_1)
             
-        if self.calc_exposure:
+        if self.auto_exposure:
             self._exposure = max(500,self.pulse_per_exposure*duty_1*self._pulse)
 
         self.ra_dist = calc_dist(self.ra_alt,self.angle)
@@ -201,13 +146,13 @@ class Sim():
         
     def calc_photons(self):
         # from matplotlib import pyplot
-        pt1 = 2*self.na_dist_1/c
-        pt2 = 2*self.na_dist_2/c
+        pt1 = 2*self.na_dist_1/C
+        pt2 = 2*self.na_dist_2/C
         
-        extra_step = (pt2-pt1)/time_per_step
+        extra_step = (pt2-pt1)/MUS_PER_STEP
         
-        time_values = numpy.arange(0,pt2+extra_step*time_per_step,time_per_step)
-        height_values = time_values*c/2
+        time_values = numpy.arange(0,pt2+extra_step*MUS_PER_STEP,MUS_PER_STEP)
+        height_values = time_values*C/2
         
         profile = numpy.zeros_like(time_values)
         
@@ -224,7 +169,7 @@ class Sim():
         
         print(f"Area = {numpy.trapz(profile, x=time_values)}")
         
-        pulse_fn = numpy.ones(int(self.pulse/time_per_step))*0.25
+        pulse_fn = numpy.ones(int(self.pulse/MUS_PER_STEP))*0.25
         # print(f"sum = {numpy.sum(pulse_fn)}")
         
         # pulse_tm = numpy.arange(int(self.pulse/time_per_step))*time_per_step
@@ -241,36 +186,36 @@ class Sim():
         rd1 = airmass*ra1
         rd2 = airmass*ra2
         
-        # ra_start = 2*2/(c*numpy.cos((self.angle)*numpy.pi/180.))
-        # ra_end = 2*60/(c*numpy.cos((self.angle)*numpy.pi/180.))
-        # ra_eq_na = 2*2/(c*numpy.cos((self.angle)*numpy.pi/180.))
-        # ra_scale = 2*30/c
+        # ra_start = 2*2/(C*numpy.cos((self.angle)*numpy.pi/180.))
+        # ra_end = 2*60/(C*numpy.cos((self.angle)*numpy.pi/180.))
+        # ra_eq_na = 2*2/(C*numpy.cos((self.angle)*numpy.pi/180.))
+        # ra_scale = 2*30/C
         # ra_scale = ra_end
         profile += 10*photons*gaussian(time_values, -100, 1.8*self.na_dist_1)
         # ra_profile = 0.8*numpy.amax(profile)*(numpy.exp(-5.5*time_values/ra_scale)/numpy.exp(-5.5*ra_eq_na/ra_scale))
         
         # ind = numpy.where((height_values>rd1) & (height_values<rd2))
         # ra_height = height_values[ind]
-        # ra_time = ra_height/c
+        # ra_time = ra_height/C
         # ra_profile = rayleigh(ra_height, stretch=airmass)#*2*(self.duty/100.)*10
         # print(f"Photons from Ra = {numpy.trapz(ra_profile, x=ra_time)}")
         # profile[ind] += ra_profile
         # profile[numpy.where(time_values<ra_start)] = 0
         # profile[numpy.where((time_values<pt1) & (time_values>ra_end))] = 0
         print(f"len(profile) = {len(profile)}")
-        print(f"int(2*20/c) = {int(2*20/c)}")
+        print(f"int(2*20/C) = {int(2*20/C)}")
         profile[:20] = 0
         
-        if sanity:
-            ra1 = 2*ra1/(c*numpy.cos((self.angle)*numpy.pi/180.))
-            ra2 = 2*ra2/(c*numpy.cos((self.angle)*numpy.pi/180.))
+        if SANITY:
+            ra1 = 2*ra1/(C*numpy.cos((self.angle)*numpy.pi/180.))
+            ra2 = 2*ra2/(C*numpy.cos((self.angle)*numpy.pi/180.))
             profile = numpy.zeros_like(time_values)
-            profile[int(pt1/time_per_step):int(pt2/time_per_step)] = 20
+            profile[int(pt1/MUS_PER_STEP):int(pt2/MUS_PER_STEP)] = 20
             self.naflux = numpy.convolve(pulse_fn,profile,"full")
-            profile[int(ra1/time_per_step):int(ra2/time_per_step)] = 40
+            profile[int(ra1/MUS_PER_STEP):int(ra2/MUS_PER_STEP)] = 40
         
         self.retflux = numpy.convolve(pulse_fn,profile,"full")
-        self.time_values = numpy.arange(0,pt2+extra_step*time_per_step+self.pulse+0.00001,time_per_step)
+        self.time_values = numpy.arange(0,pt2+extra_step*MUS_PER_STEP+self.pulse+0.00001,MUS_PER_STEP)
         if len(self.time_values)==len(self.retflux)+2:
             self.time_values = self.time_values[1:-1]
         else:
@@ -282,6 +227,20 @@ class Sim():
         # pyplot.plot(self.time_values[:len(pulse_fn)],pulse_fn)
         # pyplot.plot(self.time_values,self.retflux)
         # pyplot.show()
+        
+    def integrate(self, nsteps=3):
+        """Here we sum a number (=nsteps) of returns seperately for the scattering and
+        the sodium, then we integrate both over a single exposure time to calculate an SNR
+        """
+        from matplotlib import pyplot
+        xra_data = []
+        xna_data = []
+        for i in range(nsteps):
+            xra_data.append(i*(self.ratio+1)*self.pulse+self.time_values)
+            yra = self.retflux
+            xna = i*(self.ratio+1)*self.pulse+self.time_values
+            yna = self.naflux
+        pass
 
 
 class LaserItem(pg.GraphicsObject):
@@ -298,14 +257,14 @@ class LaserItem(pg.GraphicsObject):
         p = QtG.QPainter(self.picture)
         p.setPen(pg.mkPen('w'))
         offset = (self.sim.ratio+1)*self.index*self.sim.pulse
-        x1 = [0,self.sim.na_dist_1/c,self.sim.na_dist_1/c+self.sim.pulse,self.sim.pulse]
+        x1 = [0,self.sim.na_dist_1/C,self.sim.na_dist_1/C+self.sim.pulse,self.sim.pulse]
         points = QtG.QPolygonF([
             QtC.QPointF(offset+x1[0],0),
             QtC.QPointF(offset+x1[1],self.sim.na_dist_1),
             QtC.QPointF(offset+x1[2],self.sim.na_dist_1),
             QtC.QPointF(offset+x1[3],0),
             ])
-        x2 = [x1[1],self.sim.na_dist_2/c,self.sim.na_dist_2/c+self.sim.pulse,2*self.sim.na_dist_2/c+self.sim.pulse,2*x1[1]]
+        x2 = [x1[1],self.sim.na_dist_2/C,self.sim.na_dist_2/C+self.sim.pulse,2*self.sim.na_dist_2/C+self.sim.pulse,2*x1[1]]
         points2 = QtG.QPolygonF([
             QtC.QPointF(offset+x2[0],self.sim.na_dist_1),
             QtC.QPointF(offset+x2[1],self.sim.na_dist_2),
@@ -440,7 +399,7 @@ class AtmosItem(pg.GraphicsObject):
         self.picture = QtG.QPicture()
         p = QtG.QPainter(self.picture)
         p.setPen(pg.mkPen('k'))
-        p.setBrush(pg.mkBrush([0,135,5,128],alpha=0.5))
+        p.setBrush(pg.mkBrush([0,135,5,63]))
         x1 = [0,0,2000,2000]
         points = QtG.QPolygonF([
             QtC.QPointF(x1[0],self.sim.na_dist_1),
@@ -466,7 +425,7 @@ class AtmosItem(pg.GraphicsObject):
         return QtC.QRectF(self.picture.boundingRect())
         
 class Window(QtW.QWidget):
-    def __init__(self,sim:Sim):
+    def __init__(self, sim:Sim):
         super().__init__()
         self.sim = sim
         self.app = QtW.QApplication.instance()
@@ -493,7 +452,7 @@ class Window(QtW.QWidget):
         self.duty_box.valueChanged.connect(self.duty_callback)
         self.pulse_check_label = QtW.QLabel("Auto Pulse length")
         self.pulse_check = QtW.QCheckBox()
-        self.pulse_check.setChecked(sim.calc_pulse)
+        self.pulse_check.setChecked(sim.auto_pulse)
         self.pulse_check.toggled.connect(self.pulse_check_callback)
         self.pulse_box_label = QtW.QLabel("Pulse Length (us)")
         self.pulse_box = QtW.QDoubleSpinBox()
@@ -510,7 +469,7 @@ class Window(QtW.QWidget):
         self.overlap_box.valueChanged.connect(self.overlap_callback)
         self.exposure_check_label = QtW.QLabel("Auto Exposure length")
         self.exposure_check = QtW.QCheckBox()
-        self.exposure_check.setChecked(sim.calc_exposure)
+        self.exposure_check.setChecked(sim.auto_exposure)
         self.exposure_check.toggled.connect(self.exposure_check_callback)
         self.ppe_box_label = QtW.QLabel("Pulse per exposure")
         self.ppe_box =  QtW.QSpinBox()
@@ -624,7 +583,7 @@ class Window(QtW.QWidget):
         self.update()
         
     def pulse_check_callback(self,value):
-        self.sim.autoPulse(value)
+        self.sim.auto_pulse = value
         self.update()
         
     def pulse_callback(self):
@@ -632,7 +591,7 @@ class Window(QtW.QWidget):
         self.update()
         
     def exposure_check_callback(self,value):
-        self.sim.autoExposure(value)
+        self.sim.auto_exposure = value
         self.update()
         
     def exposure_callback(self):
@@ -709,16 +668,16 @@ if __name__ == '__main__':
     # from matplotlib import pyplot
     
     # km_per_step = 0.5
-    # time_per_step = km_per_step/c
+    # time_per_step = km_per_step/C
     
     # extra_step = 0
     
     # sanity = 0
     
     # alt1 = 80
-    # pt1 = alt1/c
+    # pt1 = alt1/C
     # alt2 = 105
-    # pt2 = alt2/c
+    # pt2 = alt2/C
     
     # extra_step = (pt2-pt1)/time_per_step
     

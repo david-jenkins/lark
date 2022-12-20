@@ -26,7 +26,7 @@ darcs = {
 # this then extracts the service class via the class_name and starts it remotely
 # this is needed because it's not easy/not possible to pickle a class definition
 services = {
-    "LatteSimSRTC": ("CanapySrtc","modeLatteSim/srtc.py", "oban"),
+    "LatteSimSRTC": ("CanapySrtc","modeLabPySim/srtc.py", "oban"),
     # "ArranSRTC": ("CanapySrtc","modeLatteSim/srtc.py", "arran"),
     # "SpeySRTC": ("CanapySrtc","modeLatteSim/srtc.py", "spey"),
 }

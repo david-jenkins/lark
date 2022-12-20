@@ -7,14 +7,19 @@ using this script.
 """
 
 from pathlib import Path
+from lark.utils import var_from_file
+from lark.utils import get_datetime_stamp
+from lark.interface import get_registry_parameters
 
 # file_path is needed for relative file locations
 # all paths are relative to the 2nd parent directory
 # so it's easier to get darc configs and files from other modes
 file_name = Path(__file__).parent.stem.replace("mode","")
+mode_path = Path(__file__).parent.resolve()
 file_path = Path(__file__).parent.parent.resolve()
 
-host = "LASERLAB"
+# host = "laserlab"
+host = get_registry_parameters().RPYC_HOSTNAME
 
 # prefix: (config_file, hostname)
 darcs = {
@@ -34,6 +39,12 @@ services = {
 services_config = {
     "NgsWFiPortSRTC": {
         "prefix":"NgsWf", "localip":"169.254.24.100", "iportip":"169.254.24.102"
+    },
+    "LabPyTestSRTC": {
+        "srtcName":"LabSHTest",
+        "modeName": "modeLabSHTest",
+        "prefixes": ["NgsWF"],
+        "dateNow": get_datetime_stamp(split=True)[0]
     }
 }
 
@@ -45,7 +56,6 @@ Also uses the EVT scoring camera."""
 def startlark():
     """A helper function to start the darcs and configure them with the parameters
     """
-    from lark.utils import var_from_file
     from lark.interface import startControlClient
 
     print("starting larks")

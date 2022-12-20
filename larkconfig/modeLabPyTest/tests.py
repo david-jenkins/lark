@@ -10,8 +10,6 @@ import numpy
 
 class CanapyDiagnostics(BaseService):
     PLUGINS = {}
-    RESULTS = {}
-    INITIALISED = {}
     def notify(self, *args):
         print(*args)
 
@@ -21,27 +19,19 @@ from lark.tools.wfs_sim import darc_pyr_slopes
 class CheckPyrSlopes(BasePlugin):
     """Get images and slopes from darc, process the images and check the slopes
     """
-    def __init__(self):
-        self.defaults = {
-            "n_img": 10,
-            "prefix": "LgsWF"
-        }
-        self.arg_desc = {
-            "n_img": "The number of images to grab"
-        }
-        super().__init__()
-
-    def Configure(self,
-            n_img: int = None
-        ):
-        kwargs = {key:value for key,value in locals().items() if key not in ["self","__class__"] and value is not None}
-        super().Configure(**kwargs)
+    parameters = ("n_img","prefix")
+    n_img = 10
+    prefix = "LgsWF"
+    arg_desc = {
+        "n_img": "The number of images to grab"
+    }
 
     def Setup(self):
         try:
             self.lark = LarkConfig(self["prefix"]).getlark()
         except NoLarkError as e:
             print(e)
+            self.lark = None
 
     def Acquire(self):
         n_img = self["n_img"]
@@ -72,21 +62,16 @@ class CheckPyrSlopes(BasePlugin):
 
 # @CanapyDiagnostics.register_plugin("pyr_quadcell")
 # class QuadCellPyr(BasePlugin):
-#     def __init__(self):
-#         self.defaults = {
-#             "n_img": 10,
-#             "prefix": "LgsWF"
-#         }
-#         super().__init__()
-
-#     def Configure(self,
-#             n_img: int = None
-#         ):
-#         kwargs = {key:value for key,value in locals().items() if key not in ["self","__class__"] and value is not None}
-#         super().Configure(**kwargs)
+#     parameters = ("n_img","prefix")
+#     n_img = 10
+#     prefix = "LgsWF"
 
 #     def Setup(self):
-#         self.lark = LarkConfig(self["prefix"]).getlark()
+#         try:
+#             self.lark = LarkConfig(self["prefix"]).getlark()
+#         except NoLarkError as e:
+#             print(e)
+#             self.lark = None
 
 #     def Acquire(self):
 #         n_img = self["n_img"]

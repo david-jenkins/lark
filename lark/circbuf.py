@@ -454,7 +454,7 @@ class CircReader(cCircReader):
                 # self.logger.info("waiting for cb")
                 self.wait_for_cb()
                 # self.logger.info("waited for cb")
-            except RuntimeError:
+            except RuntimeError as e:
                 print(e)
                 self.cb_event.clear()
                 continue

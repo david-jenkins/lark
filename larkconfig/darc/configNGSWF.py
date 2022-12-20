@@ -21,7 +21,6 @@
 import sys
 import lark
 from lark.darcconfig import gen_subapParams, gen_threadParams
-from lark.rpyclib.rpyc_brine import copydict
 from lark.darc import FITS
 from lark.darc import tel
 import numpy
@@ -572,6 +571,7 @@ if 1:
 
 if __name__ == "__main__":
     from lark import NoLarkError
+    from lark.rpyclib.rpyc_brine import CopyDict
     # xoff = [0]
     # xoff = xoff
     # yoff = [0]
@@ -615,22 +615,22 @@ if __name__ == "__main__":
 
     params["rmx"] = numpy.random.random((nacts,params["ncents"])).astype("f")
     
-    # stuff = copydict(params)
-    stuff = copydict(old_ps)
+    # stuff = CopyDict(params)
+    stuff = CopyDict(old_ps)
     for k,v in params1.items():
         print(k,repr(v),repr(params[k]))
     
     # sys.exit()
     # print(type(params1))
-    print(l.setMany(copydict(params)))
+    print(l.setMany(CopyDict(params)))
     
     print(l.get("nsub",inactive=1))
     # print(l.queued)
     # ddd
     
-    print(l.setMany(copydict(params),check=1,switch=1))
-    # l.setMany(copydict(params1))
-    # l.setMany(copydict(old_ps))
+    print(l.setMany(CopyDict(params),check=1,switch=1))
+    # l.setMany(CopyDict(params1))
+    # l.setMany(CopyDict(old_ps))
     
     # l.switchBuffer()
         

@@ -4,16 +4,16 @@ import numpy
 import rpyc.core.brine
 from rpyc.core.brine import register, _dump_registry, _dump, _load, I1, I4, _load_registry, dump, load, IMM_INTS, dumpable as _dumpable
 
-class copydict(dict):
-    """A copydict behaves EXACTLY like a dict
-    except it is an instance of copydict and 
+class CopyDict(dict):
+    """A CopyDict behaves EXACTLY like a dict
+    except it is an instance of CopyDict and 
     therefore can be distinguished from normal dicts,
     this is used to copy a dict by values through rpyc.
     A normal dict will be passed as a netref.
     """
     pass
 
-my_types = [numpy.ndarray, copydict, list, numpy.int32, numpy.int64, numpy.float32, numpy.float64, Path, PurePath, PurePosixPath, PosixPath]
+my_types = [numpy.ndarray, CopyDict, list, numpy.int32, numpy.int64, numpy.float32, numpy.float64, Path, PurePath, PurePosixPath, PosixPath]
 
 def dumpable(obj):
     if type(obj) in my_types:
@@ -169,7 +169,7 @@ def _load_nfloat64(stream):
     return numpy.frombuffer(stream.read(8),dtype=numpy.float64)[0]
 
 
-@register(_dump_registry, copydict)
+@register(_dump_registry, CopyDict)
 def _dump_dict(obj, stream):
     stream.append(TAG_DICT+I4.pack(len(obj)))
     for key,value in obj.items():
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     vars = [
         [1,2,3,4],
         numpy.array([[1,2,3],[4,5,6]],dtype=numpy.int32),
-        copydict({"a":numpy.array([[1,2,3,9,2,5],[7,5,34,5,6,3]],dtype=numpy.int64),"b":numpy.arange(5)}),
+        CopyDict({"a":numpy.array([[1,2,3,9,2,5],[7,5,34,5,6,3]],dtype=numpy.int64),"b":numpy.arange(5)}),
         Path.home(),
         PurePath("/tmp/"),
         numpy.int32(6),

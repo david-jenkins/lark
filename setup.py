@@ -27,6 +27,7 @@ setuptools.setup(
     packages = setuptools.find_packages(where="."),
     package_dir = {"":"."},
     python_requires = ">=3.7",
+    package_data = {"lark.display.icons": ["*.png"]},
     install_requires=[
           'numpy',
           'PyQt5',

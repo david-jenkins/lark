@@ -5,16 +5,20 @@ It defines an operating mode of the RTC including which darcs to start.
 It also loads the functions for the SRTC system which is launched
 using this script.
 """
-
+from lark.utils import var_from_file
+from lark.utils import get_datetime_stamp
+from lark.interface import get_registry_parameters
 from pathlib import Path
 
 # file_path is needed for relative file locations
 # all paths are relative to the 2nd parent directory
 # so it's easier to get darc configs and files from other modes
 file_name = Path(__file__).parent.stem.replace("mode","")
+mode_path = Path(__file__).parent.resolve()
 file_path = Path(__file__).parent.parent.resolve()
 
-host = "LASERLAB"
+# host = "laserlab" # set the host manually
+host = get_registry_parameters().RPYC_HOSTNAME # get the current used host
 
 # prefix: (config_file, hostname)
 darcs = {
@@ -28,11 +32,31 @@ darcs = {
 # this then extracts the service class via the class_name and starts it remotely
 # this is needed because it's not easy/not possible to pickle a class definition
 services = {
-    "LabPySHTestSRTC": ("CanapySrtc","modeLabPySHTest/srtc.py",host),
+    "LabPySHTestSRTC": ("CanapySrtc","modeLabPyTest/srtc.py",host),
     "LgsWFiPortSRTC": ("iPortService","modeLabPyTest/iport.py",host),
     "NgsWFiPortSRTC": ("iPortService","modeLabPyTest/iport.py",host),
-    "LabPySHTestDiagSRTC": ("CanapyDiagnostics","modeLabPyTest/tests.py",host)
+    # "LabPySHTestDiagSRTC": ("CanapyDiagnostics","modeLabPyTest/tests.py",host)
 }
+
+# try:
+#     srtc_config = toml.load(mode_path/"config.toml")
+# except FileNotFoundError:
+#     var_from_file("save_toml",mode_path/'config.py')()
+#     srtc_config = toml.load(mode_path/"config.toml")
+
+# def replace_filenames(srtc_config):
+#     for key,value in srtc_config.items():
+#         if isinstance(value,str) and ".npy" in value:
+#             try:
+#                 srtc_config[key] = numpy.load(mode_path/value)
+#             except:
+#                 var_from_file("save_file",mode_path/'config.py')(value)
+#                 srtc_config[key] = numpy.load(mode_path/value)
+#         elif isinstance(value,dict):
+#             srtc_config[key] = replace_filenames(value)
+#     return srtc_config
+
+# srtc_config = replace_filenames(srtc_config)
 
 services_config = {
     "LgsWFiPortSRTC": {
@@ -40,7 +64,12 @@ services_config = {
     },
     "NgsWFiPortSRTC": {
         "prefix":"NgsWf", "localip":"169.254.24.100", "iportip":"169.254.24.102"
-    }
+    },
+    "LabPySHTestSRTC": {
+        "srtcName":"LabPySHTest",
+        "modeName": "modeLabPySHTest",
+        "prefixes": ["LgsWF", "NgsWF", "PyScoring"],
+        "dateNow": get_datetime_stamp(split=True)[0]}
 }
 
 GUI = ("CanapyGUI", "modeLabPySHTest/gui.py")
@@ -51,7 +80,6 @@ Also uses the EVT scoring camera."""
 def startlark():
     """A helper function to start the darcs and configure them with the parameters
     """
-    from lark.utils import var_from_file
     from lark.interface import startControlClient
 
     print("starting larks")

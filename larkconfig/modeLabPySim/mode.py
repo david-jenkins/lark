@@ -10,6 +10,7 @@ import toml
 import lark
 from lark.utils import var_from_file
 from lark.utils import get_datetime_stamp
+from lark.interface import get_registry_parameters, RemoteDict
 from pathlib import Path
 
 # file_path is needed for relative file locations
@@ -19,7 +20,8 @@ file_name = Path(__file__).parent.stem.replace("mode","")
 mode_path = Path(__file__).parent.resolve()
 file_path = Path(__file__).parent.parent.resolve()
 
-host = "localhost"
+# host = "laserlab"
+host = get_registry_parameters().RPYC_HOSTNAME
 
 # prefix: (config_file, hostname)
 darcs = {
@@ -83,8 +85,10 @@ def startsrtc():
     for name, (cls,pth,hst) in services.items():
         text = (cls,(file_path/pth).read_text())
         srv = lark.startservice(text, name, hst)
-        if name in services_config:
+        if name in services_config:#.items():
+            # value = RemoteDict(services_config[name])
             srv.Configure(**services_config[name])
+            # srv.Configure(**value)
         srv.start()
     # CanapySrtc_text = ("CanapySrtc",(file_path/"../modeLabPyTest/srtc.py").read_text())
     # iPortService_text = ("iPortService",(file_path/"srtc.py").read_text())
@@ -181,13 +185,13 @@ Description: {nlspsp}{md.info}"""
 
     print(s.getResult())
     
-    # from lark import copydict
-    # s.Configure(**copydict(srtc_config))
+    # from lark import CopyDict
+    # s.Configure(**CopyDict(srtc_config))
     
     # print(s.parameters)
     
     print(s.getParameters())
     
-    print(s.getPlugin("save_data").Values())
+    print(s.getPlugin("save_data").Values)
 
     # s.stop()

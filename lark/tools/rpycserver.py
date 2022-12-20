@@ -20,8 +20,8 @@ from rpyc.utils.server import ThreadedServer
 from rpyc.lib import setup_logger, spawn_waitready, spawn
 
 # the module rpycbrine adds some extra types to the rpyc serialiser, mostly numpy types
-# the copydict type is a wrapper to make a dictionary copy on passing, rather than a proxy which is the default
-from lark.rpyclib.rpyc_brine import copydict
+# the CopyDict type is a wrapper to make a dictionary copy on passing, rather than a proxy which is the default
+from lark.rpyclib.rpyc_brine import CopyDict
 
 # nameserver IP and port
 NS_IP = "127.0.0.1"

@@ -12,22 +12,21 @@ from lark.services import BaseService, BasePlugin
 
 class iPortService(BaseService):
     PLUGINS = {}
-    RESULTS = {}
-    INITIALISED = {}
     def notify(self, *args):
         print(*args)
 
 @iPortService.register_plugin("iPortDaemon")
 class iPortDaemon(BasePlugin):
     """The iPortDaemon function"""
+    parameters = ("prefix","localip","iportip")
+    # defaults
+    prefix:str = "LgsWf"
+    localip:str = "169.254.24.100"
+    iportip:str = "169.254.24.101"
+    
     def Init(self):
-        self.defaults = {
-            "prefix":"LgsWf",
-            "localip":"169.254.24.100",
-            "iportip":"169.254.24.101"
-            }
-        self.begin_on_start = True
-        self.period = 1
+        self.auto_start = True
+        self.loop_period = 1
         self.pipe = None
 
     def Setup(self):
@@ -79,10 +78,6 @@ class iPortDaemon(BasePlugin):
                 print(f"Sent response: {packet}")
                 print(vhex(packet))
 
-    def Configure(self, prefix:str = None, localip:str = None, iportip:str = None):
-        kwargs = {key:value for key,value in locals().items() if key not in ["__class__","self"] and value is not None}
-        return super().Configure(**kwargs)
-
     def stop(self):
         os.write(self.pipe[1],b"exit")
         return super().stop()
@@ -90,20 +85,17 @@ class iPortDaemon(BasePlugin):
 @iPortService.register_plugin("iPortSerial")
 class iPortSerial(BasePlugin):
     """The iPortSerial function"""
+    parameters = ("prefix","iPortCommand","cam")
+    # defaults
+    prefix:str = "LgsWF"
+    iPortCommand:str = ""
+    cam:int = 0
+    
     def Init(self):
-        self.defaults = {
-            "prefix":"LgsWF",
-            "command": "",
-            "cam":0
-        }
-        self.begin_on_start = False
-
-    def Configure(self, command:str = None, prefix:str = None, cam:int = None):
-        kwargs = {key:value for key,value in locals().items() if key not in ["__class__","self"] and value is not None}
-        return super().Configure(**kwargs)
+        self.auto_start = False
 
     def Execute(self):
-        print(f"Running iPort serial prefix: {self['prefix']}, cmd: {self['command']}")
+        print(f"Running iPort serial prefix: {self['prefix']}, cmd: {self['iPortCommand']}")
         cmd = self['command'].split(" ")
         if cmd[0] == "cool":
             coolCamera(cmd[1],self["prefix"],cam=self["cam"])

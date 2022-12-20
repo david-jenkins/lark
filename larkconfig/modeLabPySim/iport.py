@@ -13,23 +13,20 @@ from lark.services import BaseService, BasePlugin
 
 class iPortService(BaseService):
     PLUGINS = {}
-    RESULTS = {}
-    INITIALISED = {}
     def notify(self, *args):
         print(*args)
 
 @iPortService.register_plugin("iPortDaemon")
 class iPortDaemon(BasePlugin):
     """The iPortDaemon function"""
-    def __init__(self):
-        self.defaults = {
-            "prefix":"LgsWF",
-            "localip":"169.254.24.100",
-            "iportip":"169.254.24.101"
-            }
-        super().__init__()
-        self.begin_on_start = True
-        self.period = 1
+    parameters = ("prefix", "localip", "iportip")
+    prefix = "LgsWF"
+    localip = "169.254.24.100"
+    iportip = "169.254.24.101"
+
+    def Init(self):
+        self.auto_start = True
+        self.loop_period = 1
         
     def Setup(self):
         try:
@@ -40,10 +37,10 @@ class iPortDaemon(BasePlugin):
         
     def _thread_func(self, _apply, **kwargs):
         cnt = 0
-        while self.go:
+        while self._go:
             print(f"Iter number {cnt}\nAnd this is the second line\nplus also a third\nfourth\nanf fin!")
             cnt+=1
-            time.sleep(self.period)
+            time.sleep(self.loop_period)
         return
         cam = 0
         ip = self["localip"]
@@ -75,26 +72,25 @@ class iPortDaemon(BasePlugin):
                 print(f"Sent response: {packet}")
                 print(vhex(packet))
 
-    def Configure(self, prefix:str = None, localip:str = None, iportip:str = None):
-        kwargs = {key:value for key,value in locals().items() if key not in ["__class__","self"] and value is not None}
-        return super().Configure(**kwargs)
-
     def Execute(self):
         print(f"Running the iPort Daemon with options {self['localip']}, {self['iportip']}, {self['prefix']},{0}")
 
 @iPortService.register_plugin("iPortSerial")
 class iPortSerial(BasePlugin):
     """The iPortSerial function"""
-    def __init__(self):
-        self.defaults = {
-            "prefix":"LgsWF",
-            "command": "",
-        }
-        super().__init__()
-
-    def Configure(self, command:str = None, prefix:str = None):
-        kwargs = {key:value for key,value in locals().items() if key not in ["__class__","self"] and value is not None}
-        return super().Configure(**kwargs)
+    parameters = ("prefix", "iPortCommand", "cam")
+    # defaults
+    prefix:str = "LgsWF"
+    iPortCommand:str = ""
+    cam:int = 0
 
     def Execute(self):
-        print(f"Running iPort serial prefix: {self['prefix']}, cmd: {self['command']}")
+        print(f"Running iPort serial prefix: {self['prefix']}, cmd: {self['iPortCommand']}")
+
+if __name__ == "__main__":
+    ips = iPortService("iPortService")
+    
+    x = ips.getPlugin("iPortSerial")
+    
+    print(x.Types)
+    print(x.run())

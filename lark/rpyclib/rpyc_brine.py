@@ -1,12 +1,61 @@
+import copy
 from pathlib import Path, PosixPath, PurePath, PurePosixPath
 import pickle
 import numpy
 import rpyc.core.brine
 from rpyc.core.brine import register, _dump_registry, _dump, _load, I1, I4, _load_registry, dump, load, IMM_INTS, dumpable as _dumpable
 
-class copydict(dict):
-    """A copydict behaves EXACTLY like a dict
-    except it is an instance of copydict and 
+
+"""
+Trying different behaviour for moving lists and dicts between RPyC connections
+
+Current default: all list and dicts are copied, to ensure netrefs for remote objects use RemoteDict and RemoteList wrapper
+
+Other option: all list and dicts are netrefed, to copy use CopyDict and CopyList
+
+I can't decide which option is best... perhaps the default and use CopyDict and CopyList
+I think copy.deepcopy works to make local copies of lists and dicts but can be slow.
+
+"""
+
+"""
+The following code implements rpyc boxing for dictionaries and lists.
+It goes through the dict and boxes each key,value pair.
+Shouldn't really have any performance penalty versus CopyDict but will
+be slower than netrefing entire dicts, same as CopyDict.
+For very large dictionaries it might be better to use a different type that doesn't get
+boxed up like this.
+"""
+
+from rpyc.core import consts
+from rpyc.core import protocol
+consts.LABEL_DICT = 5
+consts.LABEL_LIST = 6
+
+_old_box = protocol.Connection._box
+_old_unbox = protocol.Connection._unbox
+
+def _box(self, obj):
+    if type(obj) is dict:
+        return consts.LABEL_DICT, tuple((self._box(_name),self._box(_value)) for _name,_value in obj.items())
+    elif type(obj) is list:
+        return consts.LABEL_LIST, tuple(self._box(_value) for _value in obj)
+    return _old_box(self, obj)
+
+def _unbox(self, package):
+    label,value = package
+    if label == consts.LABEL_DICT:
+        return {self._unbox(_name):self._unbox(_value) for _name,_value in value}
+    elif label == consts.LABEL_LIST:
+        return [self._unbox(_value) for _value in value]
+    return _old_unbox(self, package)
+
+protocol.Connection._box = _box
+protocol.Connection._unbox = _unbox
+
+class CopyDict(dict):
+    """A CopyDict behaves EXACTLY like a dict
+    except it is an instance of CopyDict and 
     therefore can be distinguished from normal dicts,
     this is used to copy a dict by values through rpyc.
     A normal dict will be passed as a netref.
@@ -14,11 +63,54 @@ class copydict(dict):
     """
     def __init__(self, indict={}):
         for key,value in indict.items():
-            if isinstance(value,dict):
-                indict[key] = copydict(value)
+            if isinstance(value, dict):
+                indict[key] = CopyDict(value)
+            elif isinstance(value, list):
+                indict[key] = CopyList(value)
         super().__init__(indict)
 
-my_types = [numpy.ndarray, copydict, list, numpy.int32, numpy.int64, numpy.float32, numpy.float64, Path, PurePath, PurePosixPath, PosixPath]
+class CopyList(list):
+    """A CopyList behaves EXACTLY like a list
+    except it is an instance of copylist and 
+    therefore can be distinguished from normal lists,
+    this is used to copy a list by values through rpyc.
+    A normal list will be passed as a netref.
+    Now handles nested lists at init.
+    """
+    def __init__(self, inlist=[]):
+        for index,value in enumerate(inlist):
+            if isinstance(value,list):
+                inlist[index] = CopyList(value)
+            elif isinstance(value, dict):
+                inlist[index] = CopyDict(value)
+        super().__init__(inlist)
+
+def retrieve(object):
+    return copy.deepcopy(object)
+
+class RemoteDict(dict):
+    """A dict wrapper to force netref behaviour
+    """
+    def __init__(self, indict={}):
+        for key,value in indict.items():
+            if isinstance(value, dict):
+                indict[key] = RemoteDict(value)
+            elif isinstance(value, list):
+                indict[key] = RemoteList(value)
+        super().__init__(indict)
+
+class RemoteList(list):
+    """A list wrapper to force netref behaviour
+    """
+    def __init__(self, inlist=[]):
+        for index,value in enumerate(inlist):
+            if isinstance(value,list):
+                inlist[index] = RemoteList(value)
+            elif isinstance(value, dict):
+                inlist[index] = RemoteDict(value)
+        super().__init__(inlist)
+
+my_types = [numpy.ndarray, CopyDict, CopyList, numpy.int32, numpy.int64, numpy.float32, numpy.float64, Path, PurePath, PurePosixPath, PosixPath]
 
 def dumpable(obj):
     if type(obj) in my_types:
@@ -48,7 +140,7 @@ TAG_PUREPATH = b"\xfd"
 TAG_PUREPOSIXPATH = b"\xfe"
 TAG_POSIXPATH = b"\xff"
 
-@register(_dump_registry, list)
+@register(_dump_registry, CopyList)
 def _dump_list(obj, stream):
     lenobj = len(obj)
     if lenobj == 0:
@@ -174,7 +266,7 @@ def _load_nfloat64(stream):
     return numpy.frombuffer(stream.read(8),dtype=numpy.float64)[0]
 
 
-@register(_dump_registry, copydict)
+@register(_dump_registry, CopyDict)
 def _dump_dict(obj, stream):
     stream.append(TAG_DICT+I4.pack(len(obj)))
     for key,value in obj.items():
@@ -230,7 +322,7 @@ if __name__ == "__main__":
     vars = [
         [1,2,3,4],
         numpy.array([[1,2,3],[4,5,6]],dtype=numpy.int32),
-        copydict({"a":numpy.array([[1,2,3,9,2,5],[7,5,34,5,6,3]],dtype=numpy.int64),"b":numpy.arange(5)}),
+        CopyDict({"a":numpy.array([[1,2,3,9,2,5],[7,5,34,5,6,3]],dtype=numpy.int64),"b":numpy.arange(5)}),
         Path.home(),
         PurePath("/tmp/"),
         numpy.int32(6),

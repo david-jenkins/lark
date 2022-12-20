@@ -12,7 +12,7 @@ import lark
 from lark.darcconfig import gen_subapParams
 from lark.display.widgets.toolbar import CircleItem, LineItem, PlotToolbar
 from lark.rpyclib.interface import connectClient
-from lark.rpyclib.rpyc_brine import copydict
+from lark.rpyclib.rpyc_brine import CopyDict
 import numpy
 from lark.darc import FITS
 from PyQt5 import QtWidgets as QtW
@@ -624,7 +624,7 @@ class PupilControl(QtW.QWidget):
         if nsubx[0] != int(params1["nsubx"]):
             nacts = self.lark.get("nacts")
             params["rmx"] = numpy.random.random((nacts,params["ncents"])).astype("f")
-        params = copydict(params)
+        params = CopyDict(params)
         self.lark.setMany(params,check=1,switch=1)
 
 class PyCircles(QtW.QWidget):

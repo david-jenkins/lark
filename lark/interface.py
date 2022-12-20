@@ -14,7 +14,7 @@ from .rpyclib.interface import (RemoteService,
                             asyncfunc,
                             logger,
                             decode)
-from .rpyclib.rpyc_brine import copydict
+from .rpyclib.rpyc_brine import CopyDict, CopyList, RemoteDict, RemoteList
 
 def connectDaemon(hostname:str = None):
     """Connect to a running daemon
@@ -139,7 +139,7 @@ def startControlClient(prefix,*,hostname=None,params=None):
     if cnt == 0:
         raise ConnectionRefusedError() from err
     if params is not None:
-        c.configure_from_dict(copydict(params))
+        c.configure_from_dict(CopyDict(params))
     return c
 
 class ControlClient:

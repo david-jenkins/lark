@@ -29,8 +29,8 @@ from lark import get_lark_config
 from lark.utils import dictDiff, saveDict, saveDictDiff
 import os
 from pathlib import Path
-from . import check as Checker
-from .interface import copydict
+from lark import check as Checker
+from lark.interface import CopyDict
 from lark.utils import get_datetime_stamp
 
 PARAM_DIR = get_lark_config().DATA_DIR
@@ -118,7 +118,7 @@ class ParamBuf(cParamBuf):
             return retval
 
     def checkWithInactive(self,values):
-        values = copydict(values)
+        values = CopyDict(values)
         inactive = dict(Inactive(self))
         for name,value in values.items():
             try:
@@ -138,12 +138,12 @@ class ParamBuf(cParamBuf):
             self.logger.warn(repr(e))
             raise e
         diff = dictDiff(dict(Inactive(self)),inactive)
-        return copydict(diff)
+        return CopyDict(diff)
 
     def setMany(self,values,switch=0,check=0):
         self.logger.debug(f"setMany got : {values}")
         self.logger.debug(f"of type {type(values)}")
-        values = copydict(values) # this will turn a remote dict into a local dict
+        values = CopyDict(values) # this will turn a remote dict into a local dict
         if check:
             try:
                 values = self.checkWithInactive(values)
@@ -157,7 +157,7 @@ class ParamBuf(cParamBuf):
             self.queued.update(values)
             if switch:
                 self.switchBuffer()
-            return copydict(failed), copydict(values)
+            return CopyDict(failed), CopyDict(values)
 
     def _setManyToBuf(self,values,buffer):
         try:
@@ -195,13 +195,13 @@ class ParamBuf(cParamBuf):
         # self.logger.debug(type(names))
         self.logger.debug(f"getting many = {names}")
         try:
-            return copydict(self._getN(names,inactive))
+            return CopyDict(self._getN(names,inactive))
         except TypeError as e:
             raise TypeError("Expects: get(name:str | inactive=0:int") from e
         
     def getAll(self):
         # return self.getMany(self.getLabels())
-        return copydict(self)
+        return CopyDict(self)
 
     def getAll2(self):
         return self.getMany(self.getLabels())

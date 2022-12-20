@@ -6,44 +6,49 @@ e.g. A soft real time system, or a diagnostic system. See canapylark for example
 
 from abc import ABC, abstractmethod, abstractproperty
 from collections import ChainMap
+import copy
 import importlib
 import threading
 import time
+import traceback
 from typing import Any
-
-from .interface import startServiceClient, connectClient
+import warnings
+from lark.interface import startServiceClient, connectClient, CopyDict
 
 class BasePlugin:
     """The base SrtcPlugin class, must be inherited.
     defaults and arg_desc should be defined in Init(self) for each function
     """
-    defaults = {}
+    parameters = ()
     arg_desc = {}
-    _name = None
-    def __init__(self, parameter_store:dict, result_store:dict):
-        self.result = None
-        self.result_store = result_store
+    def __init__(self, name:str, parameter_store:dict, result_store:dict):
+        self._name = name
+        self._parameter_store = parameter_store
+        self._result_store = result_store
+        self._result = None
         self._temp = {}
-        self._values = parameter_store
-        self.go = 1
-        self.thread = None
-        self.period = 1
-        self.begin_on_start = False
+        self._go = 1
+        self._thread = None
+        self._defaults = {name:self.__getattribute__(name) for name in self.parameters}
+        self._values = ChainMap(self._temp,self._parameter_store,self._defaults)
+
+        self.loop_period = 1
+        self.auto_run_once = False
+        self.auto_start = False
         self.Init()
-        self.values = ChainMap(self._temp,self._values,self.defaults)
         
     def __call__(self, _apply=False, **kwargs) -> Any:
         return self.run(_apply, **kwargs)
 
     def __getitem__(self, name):
-        if name in self.defaults:
-            return self.values[name]
+        if name in self.parameters:
+            return self._values[name]
         else:
             raise KeyError
 
     def __setitem__(self, name, value):
-        if name in self.defaults:
-            self._values[name] = value
+        if name in self.parameters:
+            self._parameter_store[name] = value
         else:
             raise KeyError
 
@@ -52,7 +57,7 @@ class BasePlugin:
         self.Setup()
         self._run(_apply)
         self._temp.clear()
-        return self.result
+        return self.Result
     
     def _run(self, _apply=False):
         self.Acquire()
@@ -61,36 +66,40 @@ class BasePlugin:
         self.Finalise()
         if _apply:
             self.Apply()
-        self.result_store[self._name] = self.result
+        self._result_store[self._name] = self.Result
         
     def _thread_func(self, _apply):
-        while self.go:
+        while self._go:
             self._run(_apply=_apply)
-            time.sleep(self.period)
+            time.sleep(self.loop_period)
         
-    def start(self, _period=1, _apply=False, **kwargs):
-        self.period = _period
-        self.go = 1
-        if self.thread is not None:
-            if self.thread.is_alive():
+    def start(self, period=1, apply=False, **kwargs):
+        self.loop_period = period
+        self._go = 1
+        if self._thread is not None:
+            if self._thread.is_alive():
                 return
         self._temp.update(kwargs)
         self.Setup()
-        self.thread = threading.Thread(target=self._thread_func, args=(_apply,))
-        self.thread.start()
+        self._thread = threading.Thread(target=self._thread_func, args=(apply,))
+        self._thread.start()
         
     def stop(self):
-        self.go = 0
+        self._go = 0
         self._temp.clear()
         # if self.thread is not None:
         #     self.thread.join()
         #     self.thread = None
 
+    @property
     def Values(self):
-        return {key:self.values[key] for key in self.defaults}
+        return {key:self._values[key] for key in self.parameters}
 
     def Configure(self, **kwargs: Any):
-        self._values.update({key:value for key,value in kwargs.items() if key in self.defaults})
+        for name in kwargs:
+            if name not in self.parameters:
+                warnings.warn(f"Not setting parameter {name}")
+        self._parameter_store.update({key:value for key,value in kwargs.items() if key in self.parameters})
         # for name, value in kwargs.items():
         #     if name in self.defaults:
         #         self._values[name] = value
@@ -118,11 +127,21 @@ class BasePlugin:
     def Apply(self):
         pass
 
+    @property
     def Types(self):
-        return self.Configure.__annotations__
+        return self.__annotations__
 
+    @property
     def Result(self):
-        return self.result
+        return self._result
+        
+    @Result.setter
+    def Result(self, value):
+        self._result = value
+    
+    @property
+    def Name(self):
+        return self._name
 
 class NameConflictError(BaseException):
     """Raise for errors in adding functions due to the same name."""
@@ -143,7 +162,6 @@ class BaseService:
         def plugin_wrapper(plugin_class):
             if hasattr(plugin_class, "run"):
                 if callable(plugin_class.run):
-                    plugin_class._name = name
                     cls.PLUGINS[name] = plugin_class
                     print(f"setting self.PLUGINS[{name}] = {plugin_class}")
                     return plugin_class
@@ -154,15 +172,15 @@ class BaseService:
         self.name = name
         self.initialised = {}
         self.results = {}
-        self.parameters = parameters
+        self.parameters = {}
+        self.parameters.update(parameters)
         for key in self.PLUGINS:
             try:
-                iplug = self.PLUGINS[key](self.parameters, self.results)
+                iplug = self.PLUGINS[key](key, self.parameters, self.results)
             except Exception as e:
                 print(e)
             else:
                 if iplug is not None:
-                    iplug.store_result = self.store_result
                     self.initialised[key] = iplug
                     self.results[key] = None
 
@@ -171,9 +189,6 @@ class BaseService:
             return self.initialised[__name]
         except KeyError:
             return super().__getattr__(__name)
-
-    def store_result(self, name, result):
-        self.results[name] = result
 
     # def __getattr__(self, name):
     #     if name in self.PLUGINS:
@@ -201,21 +216,30 @@ class BaseService:
         return self.parameters
             
     def Configure(self, **kwargs):
+        print(f"Called Configure on {self.name}")
         print(kwargs)
         print(type(kwargs))
+        # kwargs = copy.deepcopy(kwargs)
         for key,value in kwargs.items():
             print(key, type(value))
         self.parameters.update(kwargs)
         # for key,value in self.initialised.items():
         #     local_kwargs = {name:arg for name,arg in kwargs.items() if name in value.defaults}
         #     value.Configure(**local_kwargs)
-    
+
     def start(self):
         failed = []
         for key,obj in self.initialised.items():
-            if obj.begin_on_start:
+            obj:BasePlugin
+            if obj.auto_start:
                 try:
                     obj.start()
+                except Exception as e:
+                    print(e)
+                    failed.append(key)
+            elif obj.auto_run_once:
+                try:
+                    obj.run()
                 except Exception as e:
                     print(e)
                     failed.append(key)
@@ -224,10 +248,12 @@ class BaseService:
 
     def stop(self):
         for key,value in self.initialised.items():
+            value:BasePlugin
             try:
                 value.stop()
-            except Exception as e:
-                print(e)
+            except Exception as ex:
+                print(ex)
+                traceback.print_exception(type(ex), ex, ex.__traceback__)
 
 
 # class RegisterPlugin(ABC):

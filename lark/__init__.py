@@ -34,7 +34,6 @@ from .interface import (connectClient,
                         startServiceClient,
                         larkNameServer,
                         get_registry_parameters,
-                        copydict
                         )
 
 

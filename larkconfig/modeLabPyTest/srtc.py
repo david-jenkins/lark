@@ -11,23 +11,23 @@ from lark.services import BaseService, BasePlugin
 
 class CanapySrtc(BaseService):
     PLUGINS = {}
-    RESULTS = {}
-    INITIALISED = {}
-    PARAMETERS = {}
     def notify(self, *args):
         print(*args)
 
 @CanapySrtc.register_plugin("save_parameters")
 class SaveParameters(BasePlugin):
+    parameters = ("dateNow", "srtcName", "modeName","prefixes")
+    # defaults
+    dateNow:str = get_datetime_stamp(split=True)[0]
+    srtcName:str = "LabPyTest"
+    modeName:str = "modeLabPyTest"
+    prefixes:list = ["LgsWF","PyScoring"]
+
     def Init(self):
-        self.defaults = {
-            "dateNow": get_datetime_stamp(split=True)[0],
-            "srtcName": "LabPyTest",
-            "modeName": "modeLabPyTest",
-            "prefixes": ["LgsWF","PyScoring"]
-        }
         date_now, time_now = get_datetime_stamp(split=True)
-        self.save_dir = get_lark_config().PARAM_DIR/self["modeName"]
+        self.save_dir = get_lark_config().DATA_DIR/self["modeName"]
+        
+    def Setup(self):
         for prefix in self["prefixes"]:
             lrk = LarkConfig(prefix).getlark()
             lrk.setSaveDir(self.save_dir)
@@ -43,32 +43,32 @@ class SaveParameters(BasePlugin):
 class DataSaver(BasePlugin):
     """
     For saving parameter buffers and command telemetry saving"""
+    params = ("srtcName","prefixes","info")
+    # defaults
+    srtcName:str = "LabPyTest"
+    prefixes:list = ["LgsWF","PyScoring"]
+    info:dict = {}
+    arg_desc = {
+        "strcname": "The name of the srtc",
+        "prefixes": "The prefixes to be saved",
+        "info": "A dict containing keys to be saved to the srtc info file"
+    }
     def Init(self):
-        self.defaults = {
-            "srtcName":"LabPyTest",
-            "prefixes":["LgsWF","PyScoring"],
-            "info":{},
-        }
-        self.arg_desc = {
-            "strcname": "The name of the srtc",
-            "prefixes": "The prefixes to be saved",
-            "info": "A dict containing keys to be saved to the srtc info file"
-        }
         self.params = None
         self.changes = {}
         self.telemfiles = []
         self.saved = {}
         self.first_run = False
-        self.larks = None
+        self.larks = {}
         self.srtcinfofile = None
         
     def update_info(self, values:dict):
         self["info"].update(values)
 
-    def Configure(self, srtcName: str = None, prefixes: list = None, info: dict = None):
-        if info: self.update_info(info)
-        info = None
-        kwargs = {key:value for key,value in locals().items() if key in self.defaults and value is not None}
+    def Configure(self, **kwargs):
+        if "info" in kwargs:
+            self.update_info(kwargs["info"])
+            del(kwargs["info"])
         return super().Configure(**kwargs)
 
     def Setup(self):
@@ -104,7 +104,7 @@ class DataSaver(BasePlugin):
             self["info"] = {}
 
     def Finalise(self):
-        self.result = f"{self['srtcName']}, {self['prefixes']}", self.saved
+        self.Result = f"{self['srtcName']}, {self['prefixes']}", self.saved
 
     def stop(self):
         for lrk in self.larks.values():
@@ -169,20 +169,16 @@ class CallbackDataSaver(DataSaver):
 @CanapySrtc.register_plugin("telemetry_saver")
 class TelemetrySaver(BasePlugin):
     """Manage saving telemetry"""
+    parameters = ("prefixes", "streams")
+    # defaults
+    prefixes = ["LgsWF","PyScoring"]
+    streams = ["rtcCentBuf","rtcMirrorBuf","rtcStatusBuf"]
     def Init(self):
-        self.defaults = {
-            "prefixes": ["LgsWF","PyScoring"],
-            "streams": ["rtcCentBuf","rtcMirrorBuf","rtcStatusBuf"]
-        }
         self.arg_desc = {
             "prefixes": "The prefixes to save",
             "streams": "The telemetry streams to save"
         }
 
-    def Configure(self, prefixes:list[str] = None, streams:list[str] = None):
-        kwargs = {key:value for key,value in locals().items() if key in self.defaults and value is not None}
-        return super().Configure(**kwargs)
-        
     def Setup(self):
         pass
 
@@ -191,27 +187,18 @@ class TelemetrySaver(BasePlugin):
 class CenterPyr(BasePlugin):
     """Find the center and radius of the pyramid quadrants
     """
-    def Init(self):
-        self.defaults = {
-            "n_img": 10,
-            "prefix": "LgsWF",
-            "p1": 68,
-            "p2": 95,
-        }
-        self.arg_desc = {
-            "n_img": "The number of images to average over",
-            "prefix": "The lark prefix to use"
-        }
-
-
-    def Configure(self,
-            n_img: int = None,
-            prefix: str = None,
-            p1: int = None,
-            p2: int = None,
-        ):
-        kwargs = {key:value for key,value in locals().items() if key in self.defaults and value is not None}
-        return super().Configure(**kwargs)
+    parameters = ("n_img","prefix","p1","p2")
+    # defaults
+    n_img:int = 10
+    prefix:str = "LgsWF"
+    p1:int = 68
+    p2:int = 95
+    arg_desc = {
+        "n_img": "The number of images to average over",
+        "prefix": "The lark prefix to use",
+        "p1": "Parameter 1",
+        "p2": "Parameter 2",
+    }
 
     def Setup(self):
         try:
@@ -247,32 +234,23 @@ class CenterPyr(BasePlugin):
         pass
 
     def Finalise(self):
-        self.result = self.im,self.circles
+        self.Result = self.im,self.circles
 
 
 @CanapySrtc.register_plugin("pyr_quadcell")
 class QuadCellPyr(BasePlugin):
+    parameters = ("n_img","prefix","p1","p2")
+    # defaults
+    n_img:int = 10
+    prefix:str = "LgsWF"
+    p1:int = 85
+    p2:int = 95
+    arg_desc = {
+        "n_img": "The number of images to average over",
+        "prefix": "The lark prefix to use"
+    }
     def Init(self):
-        self.defaults = {
-            "n_img": 10,
-            "prefix": "LgsWF",
-            "p1": 85,
-            "p2": 95
-        }
-        self.arg_desc = {
-            "n_img": "The number of images to average over",
-            "prefix": "The lark prefix to use"
-        }
         self.im = self.pupils = self.circles = self.flux = None
-
-    def Configure(self,
-            n_img: int = None,
-            prefix: str = None,
-            p1: int = None,
-            p2: int = None,
-        ):
-        kwargs = {key:value for key,value in locals().items() if key in self.defaults and value is not None}
-        super().Configure(**kwargs)
 
     def Setup(self):
         try:
@@ -347,42 +325,36 @@ class QuadCellPyr(BasePlugin):
                 print("Error in pyr_quadcell")
 
     def Finalise(self):
-        self.result = self.im, self.pupils, self.circles, self.flux
+        self.Result = self.im, self.pupils, self.circles, self.flux
 
 
 @CanapySrtc.register_plugin("save_data")
 class DataSaver(BasePlugin):
     """Save data"""
-    def Init(self):
-        self.defaults = {"file_name":Path.home()}
-
-    def Configure(self, file_name: Union[Path, str] = None):
-        if file_name is not None:
-            file_name = Path(file_name)
-        kwargs = {key:value for key,value in locals().items() if key in self.defaults and value is not None}
+    parameters = ("file_name",)
+    # defaults
+    file_name:Path = Path.home()
+    def Configure(self, **kwargs):
+        if kwargs.get("file_name",None) is not None:
+            kwargs["file_name"] = Path(kwargs["file_name"])
         return super().Configure(**kwargs)
 
     def Finalise(self):
-        self.result = "THIS IS MY RESULT " + str(self["file_name"])
+        self.Result = "THIS IS MY RESULT " + str(self["file_name"])
 
 @CanapySrtc.register_plugin("calc_stats")
 class CalculateStatistics(BasePlugin):
     """Calculate atmospheric AO statistics"""
     def Finalise(self):
-        self.result = "THE FUNXTION RAN"
+        self.Result = "THE FUNCTION RAN OK"
 
 @CanapySrtc.register_plugin("take_background")
 class TakeBackground(BasePlugin):
     """Take N images and average to get a background frame"""
-    def Init(self):
-        self.defaults = {
-            "prefix":"LgsWF",
-            "n_img":20,
-        }
-
-    def Configure(self, prefix:str = None, n_img:int = None):
-        kwargs = {key:value for key,value in locals().items() if key not in ["__class__","self"] and value is not None}
-        return super().Configure(**kwargs)
+    parameters = ("prefix", "n_img")
+    # defaults
+    prefix = "LgsWF"
+    n_img = 20
 
     def Setup(self):
         try:
@@ -412,7 +384,7 @@ class TakeBackground(BasePlugin):
         self.lark.set("bgImage",self.im)
 
     def Finalise(self):
-        self.result = self.im
+        self.Result = self.im
 
 MIN_RADIUS = 2
 

@@ -57,17 +57,18 @@ fedora34:
 
 group_dir_setup:
 	sudo groupadd lark || echo "group 'lark' already exists"
+	sudo useradd -g lark lark || echo "user 'lark' already exists"
 	sudo usermod -a -G lark $(USER)
-	test -d $(LARK_DIR) || sudo mkdir $(LARK_DIR)
-	sudo chmod g+rwxs,a+rwX $(LARK_DIR)
-	test ! -f $(LARK_DIR)/lark.cfg || sudo mv $(LARK_DIR)/lark.cfg $(LARK_DIR)/lark.cfg.old
-	sudo ln -sr conf/lark.cfg $(LARK_DIR)/lark.cfg
-	# sudo cp conf/lark.cfg $(LARK_DIR)/
-	# sudo chmod g+rw $(LARK_DIR)/lark.cfg
-	test -d $(LARK_DIR)/log || sudo mkdir $(LARK_DIR)/log
-	test -d $(LARK_DIR)/log/lark || sudo mkdir $(LARK_DIR)/log/lark
-	sudo chmod -R u+rwX,g+rwX,o+w $(LARK_DIR)/log
-	sudo chgrp -R lark $(LARK_DIR)
+	test -d $(LARK_DIR) || mkdir $(LARK_DIR)
+	chmod g+rwxs,a+rwX $(LARK_DIR)
+	test -f $(LARK_DIR)/lark.cfg && mv $(LARK_DIR)/lark.cfg $(LARK_DIR)/lark.cfg.old
+	ln -sr conf/lark.cfg $(LARK_DIR)/lark.cfg
+	# cp conf/lark.cfg $(LARK_DIR)/
+	# chmod g+rw $(LARK_DIR)/lark.cfg
+	test -d $(LARK_DIR)/log || mkdir $(LARK_DIR)/log
+	test -d $(LARK_DIR)/log/lark || mkdir $(LARK_DIR)/log/lark
+	chmod -R u+rwX,g+rwX,o+w $(LARK_DIR)/log
+	chgrp -R lark $(LARK_DIR)
 
 _python_venv: group_dir_setup
 	cd $(LARK_DIR) && /usr/local/bin/python$(SHORT_VER) -m venv $(VENV_NAME)
@@ -117,6 +118,7 @@ python310_c75: _python_c75 _python_venv
 clean:
 	$(MAKE) -C darc clean
 	$(MAKE) -C doc clean || echo "Sphinx clean failed"
+	rm -rf build
 	rm -rf $(BUILDDIR)
 	rm -rf lark/*.so
 	rm -rf lark/darc/*.so

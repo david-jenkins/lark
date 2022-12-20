@@ -59,8 +59,7 @@ class SrtcFunctionList(SrtcFunctionList_base):
             print(name)
             function = lark.getservice(self.name).getPlugin(name)
             print(function)
-            values = function.Values()
-            self.param_tree.setData(values)
+            self.param_tree.setData(function.Values)
 
     def on_connect(self):
         pass
@@ -68,15 +67,20 @@ class SrtcFunctionList(SrtcFunctionList_base):
     def on_disconnect(self):
         pass
 
-    def srtc_connect(self, name):
-        self.name = name
+    def srtc_connect(self, name=None):
+        if name is not None:
+            self.name = name
         self.func_list.clear()
         self.param_tree.clear()
         functions = lark.getservice(self.name).getPlugin()
         for k,v in functions.items():
             item = QtW.QListWidgetItem(k)
             self.func_list.addItem(item)
-            self.param_tree.setData(v.values)
+            self.param_tree.setData(v.Values)
+            
+    def showEvent(self, a0: QtG.QShowEvent) -> None:
+        self.srtc_connect()
+        return super().showEvent(a0)
 
 
 
@@ -140,8 +144,8 @@ class SrtcControl(SrtcControl_base):
             functions = srtc.getPlugin()
             results = srtc.getResult()
             for k,v in functions.items():
-                # vals = {k:v for k,v in v.Values().items()}
-                self.print(f"{k} : {v.Values()} : {results.get(k,None)}",1)
+                # vals = {k:v for k,v in v.Values.items()}
+                self.print(f"{k} : {v.Values} : {results.get(k,None)}",1)
 
     def on_connect(self):
         pass

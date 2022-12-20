@@ -5,16 +5,23 @@ It defines an operating mode of the RTC including which darcs to start.
 It also loads the functions for the SRTC system which is launched
 using this script.
 """
-
+import numpy
+import toml
+import lark
+from lark.utils import var_from_file
+from lark.utils import get_datetime_stamp
+from lark.interface import get_registry_parameters
 from pathlib import Path
 
 # file_path is needed for relative file locations
 # all paths are relative to the 2nd parent directory
 # so it's easier to get darc configs and files from other modes
 file_name = Path(__file__).parent.stem.replace("mode","")
+mode_path = Path(__file__).parent.resolve()
 file_path = Path(__file__).parent.parent.resolve()
 
-host = "LASERLAB"
+# host = "laserlab"
+host = get_registry_parameters().RPYC_HOSTNAME
 
 # prefix: (config_file, hostname)
 darcs = {
@@ -32,10 +39,36 @@ services = {
     "LabPyTestDiagSRTC": ("CanapyDiagnostics","modeLabPyTest/tests.py",host)
 }
 
+# try:
+#     srtc_config = toml.load(mode_path/"config.toml")
+# except FileNotFoundError:
+#     var_from_file("save_toml",mode_path/'config.py')()
+#     srtc_config = toml.load(mode_path/"config.toml")
+
+# def replace_filenames(srtc_config):
+#     for key,value in srtc_config.items():
+#         if isinstance(value,str) and ".npy" in value:
+#             try:
+#                 srtc_config[key] = numpy.load(mode_path/value)
+#             except:
+#                 var_from_file("save_file",mode_path/'config.py')(value)
+#                 srtc_config[key] = numpy.load(mode_path/value)
+#         elif isinstance(value,dict):
+#             srtc_config[key] = replace_filenames(value)
+#     return srtc_config
+
+# srtc_config = replace_filenames(srtc_config)
+
+
 services_config = {
     "LgsWFiPortSRTC": {
         "prefix":"LgsWf", "localip":"169.254.24.100", "iportip":"169.254.24.101"
-    }
+    },
+    "LabPyTestSRTC": {
+        "srtcName":"LabPyTest",
+        "modeName": "modeLabPyTest",
+        "prefixes": ["LgsWF", "PyScoring"],
+        "dateNow":get_datetime_stamp(split=True)[0]}
 }
 
 GUI = ("CanapyGUI", "modeLabPyTest/gui.py")
@@ -46,7 +79,6 @@ Also uses the EVT scoring camera."""
 def startlark():
     """A helper function to start the darcs and configure them with the parameters
     """
-    from lark.utils import var_from_file
     from lark.interface import startControlClient
 
     print("starting larks")
@@ -60,7 +92,6 @@ def startlark():
 def startsrtc():
     """A helper function to start the SRTC instance for this observng block
     """
-    import lark
     for name, (cls,pth,hst) in services.items():
         text = (cls,(file_path/pth).read_text())
         srv = lark.startservice(text, name, hst)
@@ -93,8 +124,6 @@ def stoplark():
             h.stoplark(prefix)
 
 def stopsrtc():
-    import lark
-    import time
     for name, (cls,pth,hst) in services.items():
         try:
             s = lark.getservice(name)
